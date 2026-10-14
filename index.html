@@ -12,6 +12,7 @@
       <nav>
         <button class="nav-link active" data-view="overview">▦ <span>Visão geral</span></button>
         <button class="nav-link" data-view="discovery">⌕ <span>Descoberta de público</span></button>
+        <button class="nav-link" data-view="campaigns">◎ <span>Campanhas</span></button>
         <button class="nav-link" data-view="planner">▣ <span>Planejamento</span></button>
         <button class="nav-link" data-view="content">✦ <span>Estúdio de conteúdo</span></button>
         <button class="nav-link" data-view="analytics">↗ <span>Análise de desempenho</span></button>
@@ -54,6 +55,30 @@
           <article class="panel"><div class="panel-head"><div><h3>Segmentos salvos</h3><p>Seus públicos-alvo registrados</p></div></div><div id="segmentsList" class="discovery-results"><div class="list-empty">Nenhum segmento salvo.</div></div></article>
           <article class="panel"><div class="panel-head"><div><h3>Oportunidades salvas</h3><p>Observações que podem virar conteúdo</p></div></div><div id="opportunitiesList" class="discovery-results"><div class="list-empty">Ainda não há oportunidades salvas.</div></div></article>
         </div>
+      </section>
+      <section class="view" id="view-campaigns">
+        <div class="section-heading"><div><h2>Campanhas de crescimento</h2><p>Transforme segmentos e oportunidades em ações mensuráveis.</p></div><span class="pill">Planejamento</span></div>
+        <div class="discovery-intro"><strong>Distribuição responsável</strong><p>Esta área organiza objetivo, público, conteúdo e orçamento. Não executa anúncios nem publica automaticamente. A distribuição paga dependerá da configuração e aprovação nas plataformas oficiais.</p></div>
+        <div class="campaign-layout">
+          <form class="panel editor" id="campaignForm">
+            <h3>Nova campanha</h3>
+            <label>Nome da campanha<input id="campaignName" required placeholder="Ex.: Inglês para quem está começando"></label>
+            <label>Segmento associado<select id="campaignSegment"><option value="">Escolher segmento (opcional)</option></select></label>
+            <div class="form-row"><label>Plataforma<select id="campaignPlatform"><option>Instagram</option><option>YouTube</option><option>Ambos</option></select></label><label>Estratégia<select id="campaignStrategy"><option value="organic">Orgânica</option><option value="paid">Anúncios pagos</option><option value="both">Orgânica + anúncios</option></select></label></div>
+            <label>Objetivo<select id="campaignGoal"><option>Aumentar alcance qualificado</option><option>Gerar visitas ao perfil/canal</option><option>Aumentar visualizações</option><option>Gerar leads ou contatos</option><option>Promover produto ou serviço</option></select></label>
+            <div class="form-row"><label>Data inicial<input id="campaignStart" type="date"></label><label>Data final<input id="campaignEnd" type="date"></label></div>
+            <div class="form-row"><label>Orçamento total (R$)<input id="campaignBudget" type="number" min="0" step="0.01" value="0"></label><label>Meta numérica<input id="campaignTarget" type="number" min="0" step="1" placeholder="Ex.: 1000"></label></div>
+            <label>Observações e hipótese<textarea id="campaignNotes" rows="3" placeholder="O que vamos testar e como saber se funcionou?"></textarea></label>
+            <button class="btn btn-primary" type="submit">Salvar campanha</button>
+            <p class="fine-print">Comece com orçamento zero. Só registre gastos reais e resultados observados.</p>
+          </form>
+          <div class="panel"><div class="panel-head"><div><h3>Campanhas salvas</h3><p>Edite o status e acompanhe a execução.</p></div></div><div id="campaignList" class="discovery-results"><div class="list-empty">Nenhuma campanha criada.</div></div></div>
+        </div>
+        <div class="panel campaign-guide"><h3>Antes de ativar anúncios ou conectar contas</h3><div class="integration-checklist">
+          <div><span>01</span><b>Instagram</b><p>Conta profissional compatível e aplicativo Meta configurado com permissões adequadas.</p><a href="https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api/" target="_blank" rel="noopener noreferrer">Documentação oficial da Meta ↗</a></div>
+          <div><span>02</span><b>YouTube</b><p>Projeto Google Cloud, APIs habilitadas, OAuth 2.0 e consentimento do canal.</p><a href="https://developers.google.com/youtube/v3/guides/auth/server-side-web-apps" target="_blank" rel="noopener noreferrer">Guia OAuth oficial ↗</a></div>
+          <div><span>03</span><b>Segurança</b><p>Tokens e segredos devem ficar no backend; nunca no JavaScript público.</p><span class="pill pill-warning">Credenciais ainda não configuradas</span></div>
+        </div></div>
       </section>
       <section class="view" id="view-planner">
         <div class="section-heading"><div><h2>Planejamento editorial</h2><p>Organize ideias, datas e status de Instagram e YouTube.</p></div><button class="btn btn-primary" id="newContentPlanner">＋ Adicionar conteúdo</button></div>
