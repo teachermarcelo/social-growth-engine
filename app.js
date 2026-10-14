@@ -13,7 +13,7 @@
   let state = loadState();
   let toastTimer;
   function loadState() {
-    try { const v = JSON.parse(localStorage.getItem(STORE) || "{}"); return {posts:Array.isArray(v.posts)?v.posts:[],metrics:Array.isArray(v.metrics)?v.metrics:[]}; }
+    try { const v = JSON.parse(localStorage.getItem(STORE) || "{}"); return {posts:Array.isArray(v.posts)?v.posts:[],metrics:Array.isArray(v.metrics)?v.metrics:[],segments:Array.isArray(v.segments)?v.segments:[],opportunities:Array.isArray(v.opportunities)?v.opportunities:[]}; }
     catch { return {posts:[],metrics:[]}; }
   }
   function save() {
@@ -45,7 +45,7 @@
     cloudBusy = true;
     setCloudStatus("Salvando alterações na nuvem…");
     try {
-      for (const [table, items] of [["sge_posts", state.posts], ["sge_metrics", state.metrics]]) {
+      for (const [table, items] of [["sge_posts", state.posts], ["sge_metrics", state.metrics], ["sge_segments", state.segments], ["sge_opportunities", state.opportunities]]) {
         if (!items.length) continue;
         const rows = items.map(item => ({id:item.id, user_id:currentUser.id, payload:item, updated_at:new Date().toISOString()}));
         const {error} = await supabaseClient.from(table).upsert(rows, {onConflict:"user_id,id"});
@@ -65,12 +65,13 @@
   async function loadAndMergeCloudData() {
     if (!supabaseClient || !currentUser) return;
     setCloudStatus("Carregando e mesclando registros…");
-    const [postsResult, metricsResult] = await Promise.all([
+    const [postsResult, metricsResult, segmentsResult, opportunitiesResult] = await Promise.all([
       supabaseClient.from("sge_posts").select("payload").eq("user_id", currentUser.id),
-      supabaseClient.from("sge_metrics").select("payload").eq("user_id", currentUser.id)
+      supabaseClient.from("sge_metrics").select("payload").eq("user_id", currentUser.id),
+      supabaseClient.from("sge_segments").select("payload").eq("user_id", currentUser.id),
+      supabaseClient.from("sge_opportunities").select("payload").eq("user_id", currentUser.id)
     ]);
-    if (postsResult.error) throw postsResult.error;
-    if (metricsResult.error) throw metricsResult.error;
+    for (const result of [postsResult, metricsResult, segmentsResult, opportunitiesResult]) if (result.error) throw result.error;
     const merge = (local, remote) => {
       const byId = new Map(remote.map(row => [row.payload?.id, row.payload]).filter(([id,p]) => id && p));
       local.forEach(item => byId.set(item.id, item));
@@ -78,6 +79,8 @@
     };
     state.posts = merge(state.posts, postsResult.data || []);
     state.metrics = merge(state.metrics, metricsResult.data || []);
+    state.segments = merge(state.segments, segmentsResult.data || []);
+    state.opportunities = merge(state.opportunities, opportunitiesResult.data || []);
     localStorage.setItem(STORE, JSON.stringify(state));
     renderAll();
     await syncLocalChanges();
@@ -139,7 +142,7 @@
   function showView(name) {
     document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id==="view-"+name));
     document.querySelectorAll(".nav-link").forEach(v=>v.classList.toggle("active",v.dataset.view===name));
-    const titles={overview:"Visão geral",planner:"Planejamento",content:"Estúdio de conteúdo",analytics:"Análise de desempenho",settings:"Configurações"};
+    const titles={overview:"Visão geral",discovery:"Descoberta de público",planner:"Planejamento",content:"Estúdio de conteúdo",analytics:"Análise de desempenho",settings:"Configurações"};
     $("pageTitle").textContent=titles[name]||"Visão geral"; $("sidebar").classList.remove("open"); window.scrollTo({top:0,behavior:"smooth"});
   }
   document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));
@@ -188,6 +191,35 @@
     $("ideaSuggestions").querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",()=>{const text=templates[Number(b.dataset.copy)]+"\n\n"+cta;navigator.clipboard?.writeText(text).then(()=>toast("Texto copiado." )).catch(()=>toast(text));}));
   }
   $("generateIdeas").addEventListener("click",generateIdeas);
+
+  function buildSearchTerms(segment) {
+    const name=segment.name.trim(), audience=(segment.audience||"").trim();
+    const seeds=[name,`${name} para iniciantes`,`como aprender ${name}`,`dúvidas sobre ${name}`,`erros comuns em ${name}`,`dicas práticas de ${name}`,audience?`${audience} ${name}`:`${name} passo a passo`,`mitos e verdades sobre ${name}`];
+    return [...new Set(seeds.map(s=>s.trim()).filter(Boolean))].slice(0,8);
+  }
+  function renderDiscovery() {
+    const results=$("discoveryResults");
+    const current=state.segments.slice().sort((a,b)=>(b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""))[0];
+    if(current&&results&&!results.dataset.segmentId)renderSearchTerms(current);
+    $("segmentsList").innerHTML=state.segments.length?state.segments.slice().sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")).map(s=>`
+      <div class="discovery-item"><div><b>${esc(s.name)}</b><p>${esc(s.audience||"Público não detalhado")} · ${esc(s.region||"Região não definida")} · ${esc(s.goal)}</p></div><div class="discovery-actions"><button class="row-action" data-use-segment="${esc(s.id)}">Pesquisar</button><button class="row-action" data-delete-segment="${esc(s.id)}">Excluir</button></div></div>`).join(""):'<div class="list-empty">Nenhum segmento salvo.</div>';
+    $("segmentsList").querySelectorAll("[data-use-segment]").forEach(b=>b.addEventListener("click",()=>{const s=state.segments.find(x=>x.id===b.dataset.useSegment);if(s){renderSearchTerms(s);$("segmentName").value=s.name;$("segmentAudience").value=s.audience||"";$("segmentLanguage").value=s.language||"pt-BR";$("segmentRegion").value=s.region||"";$("segmentGoal").value=s.goal||"Ensinar e informar";}}));
+    $("segmentsList").querySelectorAll("[data-delete-segment]").forEach(b=>b.addEventListener("click",()=>{if(!confirm("Excluir este segmento salvo?"))return;const id=b.dataset.deleteSegment;state.segments=state.segments.filter(s=>s.id!==id);deleteCloudRecord("sge_segments",id).catch(err=>setCloudStatus("Erro ao excluir segmento na nuvem: "+safeError(err),true));save();}));
+    $("opportunitiesList").innerHTML=state.opportunities.length?state.opportunities.slice().sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")).map(o=>`
+      <div class="discovery-item"><div><b>${esc(o.term)}</b><p>${esc(o.segmentName)} · ${esc(o.platform)} · ${esc(o.note||"Pesquisa ainda não analisada")}</p><small>${esc(o.source||"Pesquisa manual")} · ${o.createdAt?new Date(o.createdAt).toLocaleDateString("pt-BR"):""}</small></div><div class="discovery-actions"><button class="row-action" data-opportunity-content="${esc(o.id)}">Virar conteúdo</button><button class="row-action" data-delete-opportunity="${esc(o.id)}">Excluir</button></div></div>`).join(""):'<div class="list-empty">Ainda não há oportunidades salvas.</div>';
+    $("opportunitiesList").querySelectorAll("[data-opportunity-content]").forEach(b=>b.addEventListener("click",()=>{const o=state.opportunities.find(x=>x.id===b.dataset.opportunityContent);if(!o)return;$("contentTitle").value=o.term;$("contentAudience").value=`Público: ${o.segmentName}. Oportunidade pesquisada em ${o.platform}. ${o.note||""}`;$("contentPlatform").value="Ambos";showView("content");toast("Oportunidade enviada ao Estúdio de conteúdo.");}));
+    $("opportunitiesList").querySelectorAll("[data-delete-opportunity]").forEach(b=>b.addEventListener("click",()=>{if(!confirm("Excluir esta oportunidade?"))return;const id=b.dataset.deleteOpportunity;state.opportunities=state.opportunities.filter(o=>o.id!==id);deleteCloudRecord("sge_opportunities",id).catch(err=>setCloudStatus("Erro ao excluir oportunidade na nuvem: "+safeError(err),true));save();}));
+  }
+  function renderSearchTerms(segment) {
+    const results=$("discoveryResults");results.dataset.segmentId=segment.id;
+    const terms=buildSearchTerms(segment);
+    results.innerHTML=terms.map((term,i)=>`
+      <div class="term-card"><div class="term-top"><span class="term-number">${String(i+1).padStart(2,"0")}</span><b>${esc(term)}</b></div>
+        <div class="term-links"><a href="https://www.youtube.com/results?search_query=${encodeURIComponent(term)}" target="_blank" rel="noopener noreferrer">Pesquisar no YouTube ↗</a><a href="https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(term)}" target="_blank" rel="noopener noreferrer">Explorar no Instagram ↗</a></div>
+        <button class="btn btn-secondary btn-block" type="button" data-save-opportunity="${i}">Salvar como oportunidade</button></div>`).join("");
+    results.querySelectorAll("[data-save-opportunity]").forEach(b=>b.addEventListener("click",()=>{const term=terms[Number(b.dataset.saveOpportunity)];if(state.opportunities.some(o=>o.term===term&&o.segmentId===segment.id)){toast("Esta oportunidade já está salva para o segmento.");return;}state.opportunities.push({id:uid(),term,segmentId:segment.id,segmentName:segment.name,platform:"Ambos",source:"Pesquisa oficial aberta manualmente",note:"Revisar resultados e registrar o que foi observado.",createdAt:new Date().toISOString()});save();toast("Oportunidade salva. Revise os resultados e suas observações.");}));
+  }
+  $("segmentForm").addEventListener("submit",e=>{e.preventDefault();const segment={id:uid(),name:$("segmentName").value.trim(),audience:$("segmentAudience").value.trim(),language:$("segmentLanguage").value,region:$("segmentRegion").value.trim(),goal:$("segmentGoal").value,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};if(!segment.name)return;state.segments.push(segment);save();renderSearchTerms(segment);toast("Segmento salvo e pesquisas sugeridas.");});
   function metricValues(){return state.metrics.reduce((a,m)=>{a.views+=m.views||0;a.reach+=m.reach||0;a.followers+=m.followers||0;a.likes+=m.likes||0;a.comments+=m.comments||0;a.shares+=m.shares||0;return a;},{views:0,reach:0,followers:0,likes:0,comments:0,shares:0});}
   function renderAnalytics(){
     const m=metricValues(),count=state.metrics.length,eng=(m.views?100*(m.likes+m.comments+m.shares)/m.views:0),avg=count?m.views/count:0;
@@ -196,7 +228,7 @@
     $("metricsList").innerHTML=count?state.metrics.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(m=>`<div style="padding:12px 0;border-bottom:1px solid var(--line);display:flex;gap:12px;justify-content:space-between;align-items:center"><div><b style="font-size:12px">${esc(m.title)}</b><div style="font-size:10px;color:var(--muted)">${esc(m.platform)} · ${m.date?new Date(m.date+"T12:00:00").toLocaleDateString("pt-BR"):"Sem data"} · ${fmt(m.views)} views</div></div><button class="row-action" data-metric-delete="${esc(m.id)}">Excluir</button></div>`).join(""):'<div class="list-empty">Ainda não há métricas cadastradas.</div>';
     $("metricsList").querySelectorAll("[data-metric-delete]").forEach(b=>b.addEventListener("click",()=>{if(confirm("Excluir este registro?")){const id=b.dataset.metricDelete;state.metrics=state.metrics.filter(x=>x.id!==id);save();deleteCloudRecord("sge_metrics",id).catch(err=>setCloudStatus("Erro ao excluir na nuvem: "+safeError(err),true));toast("Registro excluído.");}}));
   }
-  function renderAll(){renderPlanner();renderAnalytics();}
+  function renderAll(){renderPlanner();renderAnalytics();renderDiscovery();}
   const metricDialog=$("metricDialog");
   $("addMetricBtn").onclick=()=>{ $("metricDate").value=new Date().toISOString().slice(0,10);metricDialog.showModal(); };
   $("closeMetric").onclick=$("cancelMetric").onclick=()=>metricDialog.close();
@@ -206,8 +238,8 @@
   });
   function download(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);}
   $("exportBackup").onclick=()=>download("social-growth-backup.json",JSON.stringify({schemaVersion:1,exportedAt:new Date().toISOString(),...state},null,2),"application/json");
-  $("importBackup").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.posts)||!Array.isArray(data.metrics))throw Error("Formato inválido");if(!confirm("Importar este backup substituirá os dados atuais deste navegador. Deseja continuar?"))return;state={posts:data.posts,metrics:data.metrics};save();toast("Backup importado.");}catch(err){toast("Arquivo inválido. Nenhum dado foi importado.");}finally{e.target.value="";}});
-  $("clearData").onclick=()=>{if(confirm("Isso apagará os conteúdos e métricas salvos neste navegador. Exporte um backup antes. Continuar?")){state={posts:[],metrics:[]};save();toast("Dados locais apagados.");}};
+  $("importBackup").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.posts)||!Array.isArray(data.metrics))throw Error("Formato inválido");if(!confirm("Importar este backup substituirá os dados atuais deste navegador. Deseja continuar?"))return;state={posts:data.posts,metrics:data.metrics,segments:Array.isArray(data.segments)?data.segments:[],opportunities:Array.isArray(data.opportunities)?data.opportunities:[]};save();toast("Backup importado.");}catch(err){toast("Arquivo inválido. Nenhum dado foi importado.");}finally{e.target.value="";}});
+  $("clearData").onclick=()=>{if(confirm("Isso apagará os conteúdos e métricas salvos neste navegador. Exporte um backup antes. Continuar?")){state={posts:[],metrics:[],segments:[],opportunities:[]};save();toast("Dados locais apagados.");}};
   $("exportCsv").onclick=()=>{if(!state.metrics.length){toast("Não há métricas para exportar.");return;}const cols=["title","platform","date","views","reach","likes","comments","shares","followers","retention"];const quote=v=>'"'+String(v??"").replace(/"/g,'""')+'"';const csv=[cols.join(";"),...state.metrics.map(m=>cols.map(k=>quote(m[k])).join(";"))].join("\r\n");download("social-growth-metricas.csv","\ufeff"+csv,"text/csv;charset=utf-8");};
   renderAll();
 })();
