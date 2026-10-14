@@ -14,7 +14,7 @@
   let toastTimer;
   function loadState() {
     try { const v = JSON.parse(localStorage.getItem(STORE) || "{}"); return {posts:Array.isArray(v.posts)?v.posts:[],metrics:Array.isArray(v.metrics)?v.metrics:[],segments:Array.isArray(v.segments)?v.segments:[],opportunities:Array.isArray(v.opportunities)?v.opportunities:[],campaigns:Array.isArray(v.campaigns)?v.campaigns:[]}; }
-    catch { return {posts:[],metrics:[]}; }
+    catch { return {posts:[],metrics:[],segments:[],opportunities:[],campaigns:[]}; }
   }
   function save() {
     localStorage.setItem(STORE, JSON.stringify(state));
