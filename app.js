@@ -2,13 +2,131 @@
 (() => {
   const $ = id => document.getElementById(id);
   const STORE = "socialGrowthEngine.v1";
+  const SUPABASE_URL = "https://fofhhslxyxkkfbhvyrte.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_kIMlxknOOKooZUKhDbqN-g_-Vk7EpHf";
+  const supabaseClient = window.supabase?.createClient
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+    : null;
+  let currentUser = null;
+  let cloudBusy = false;
   let state = loadState();
   let toastTimer;
   function loadState() {
     try { const v = JSON.parse(localStorage.getItem(STORE) || "{}"); return {posts:Array.isArray(v.posts)?v.posts:[],metrics:Array.isArray(v.metrics)?v.metrics:[]}; }
     catch { return {posts:[],metrics:[]}; }
   }
-  function save() { localStorage.setItem(STORE, JSON.stringify(state)); renderAll(); }
+  function save() {
+    localStorage.setItem(STORE, JSON.stringify(state));
+    renderAll();
+    if (currentUser) syncLocalChanges().catch(err => setCloudStatus("Erro ao sincronizar: " + safeError(err), true));
+  }
+  function safeError(err) { return String(err?.message || err || "erro desconhecido").slice(0, 220); }
+  function setCloudStatus(message, isError=false) {
+    const el = $("cloudStatus");
+    if (el) { el.textContent = message; el.classList.toggle("error", isError); }
+  }
+  function setCloudSignedIn(user) {
+    currentUser = user || null;
+    $("cloudSignOut").hidden = !currentUser;
+    $("cloudAuthForm").querySelectorAll("input,button").forEach(el => { el.disabled = !!currentUser; });
+    if (currentUser) {
+      setCloudStatus("Conectado: " + (currentUser.email || "conta autenticada"));
+      $("cloudSignIn").textContent = "Conectado";
+    } else {
+      setCloudStatus(supabaseClient ? "Não conectado. Seus dados continuam neste navegador." : "Biblioteca Supabase não carregou. Verifique sua conexão.");
+      $("cloudSignIn").textContent = "Entrar e sincronizar";
+      $("cloudAuthForm").querySelectorAll("input,button").forEach(el => { el.disabled = false; });
+    }
+  }
+  async function syncLocalChanges() {
+    if (!supabaseClient || !currentUser || cloudBusy) return;
+    cloudBusy = true;
+    setCloudStatus("Salvando alterações na nuvem…");
+    try {
+      for (const [table, items] of [["sge_posts", state.posts], ["sge_metrics", state.metrics]]) {
+        if (!items.length) continue;
+        const rows = items.map(item => ({id:item.id, user_id:currentUser.id, payload:item, updated_at:new Date().toISOString()}));
+        const {error} = await supabaseClient.from(table).upsert(rows, {onConflict:"user_id,id"});
+        if (error) throw error;
+      }
+      setCloudStatus("Sincronizado com a nuvem · " + new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}));
+    } finally { cloudBusy = false; }
+  }
+  async function deleteCloudRecord(table, id) {
+    if (!supabaseClient || !currentUser) return;
+    const {error} = await supabaseClient.from(table).delete().eq("id", id).eq("user_id", currentUser.id);
+    if (error) throw error;
+  }
+  async function loadAndMergeCloudData() {
+    if (!supabaseClient || !currentUser) return;
+    setCloudStatus("Carregando e mesclando registros…");
+    const [postsResult, metricsResult] = await Promise.all([
+      supabaseClient.from("sge_posts").select("payload").eq("user_id", currentUser.id),
+      supabaseClient.from("sge_metrics").select("payload").eq("user_id", currentUser.id)
+    ]);
+    if (postsResult.error) throw postsResult.error;
+    if (metricsResult.error) throw metricsResult.error;
+    const merge = (local, remote) => {
+      const byId = new Map(remote.map(row => [row.payload?.id, row.payload]).filter(([id,p]) => id && p));
+      local.forEach(item => byId.set(item.id, item));
+      return [...byId.values()];
+    };
+    state.posts = merge(state.posts, postsResult.data || []);
+    state.metrics = merge(state.metrics, metricsResult.data || []);
+    localStorage.setItem(STORE, JSON.stringify(state));
+    renderAll();
+    await syncLocalChanges();
+    toast("Dados locais e da nuvem foram mesclados.");
+  }
+  if (!supabaseClient) {
+    setCloudStatus("Biblioteca Supabase não carregou. Os dados locais continuam disponíveis.", true);
+  } else {
+    $("cloudAuthForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      const email = $("cloudEmail").value.trim();
+      const password = $("cloudPassword").value;
+      $("cloudSignIn").disabled = $("cloudSignUp").disabled = true;
+      setCloudStatus("Entrando na sua conta…");
+      try {
+        const {data,error} = await supabaseClient.auth.signInWithPassword({email,password});
+        if (error) throw error;
+        setCloudSignedIn(data.user);
+        await loadAndMergeCloudData();
+      } catch (err) { setCloudStatus(safeError(err), true); }
+      finally { if (!currentUser) $("cloudSignIn").disabled = $("cloudSignUp").disabled = false; }
+    });
+    $("cloudSignUp").addEventListener("click", async () => {
+      const email = $("cloudEmail").value.trim();
+      const password = $("cloudPassword").value;
+      if (!email || password.length < 6) { setCloudStatus("Informe um e-mail válido e uma senha com pelo menos 6 caracteres.", true); return; }
+      $("cloudSignIn").disabled = $("cloudSignUp").disabled = true;
+      setCloudStatus("Criando conta…");
+      try {
+        const {data,error} = await supabaseClient.auth.signUp({email,password,options:{emailRedirectTo:window.location.href.split("#")[0]}});
+        if (error) throw error;
+        if (data.user && data.session) {
+          setCloudSignedIn(data.user);
+          await loadAndMergeCloudData();
+        } else {
+          setCloudStatus("Conta criada. Confira seu e-mail para confirmar a conta e depois entre.");
+        }
+      } catch (err) { setCloudStatus(safeError(err), true); }
+      finally { if (!currentUser) $("cloudSignIn").disabled = $("cloudSignUp").disabled = false; }
+    });
+    $("cloudSignOut").addEventListener("click", async () => {
+      const {error} = await supabaseClient.auth.signOut();
+      if (error) { setCloudStatus(safeError(error), true); return; }
+      setCloudSignedIn(null);
+      toast("Você saiu. Os dados locais foram mantidos.");
+    });
+    supabaseClient.auth.getSession().then(async ({data,error}) => {
+      if (error) { setCloudStatus(safeError(error), true); return; }
+      if (data.session?.user) {
+        setCloudSignedIn(data.session.user);
+        try { await loadAndMergeCloudData(); } catch (err) { setCloudStatus("Erro ao carregar nuvem: " + safeError(err), true); }
+      } else setCloudSignedIn(null);
+    });
+  }
   function uid() { return "sg_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,7); }
   function esc(s) { return String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function fmt(n) { return new Intl.NumberFormat("pt-BR",{notation:n>=100000?"compact":"standard",maximumFractionDigits:1}).format(n||0); }
@@ -41,7 +159,7 @@
     $("editId").value=p.id;$("editTitle").value=p.title;$("editPlatform").value=p.platform;$("editStatus").value=p.status;$("editDate").value=p.date||"";$("editNotes").value=p.notes||"";
     $("editDialog").showModal();
   }
-  function deletePost(id){if(!confirm("Excluir este conteúdo do planejamento?"))return;state.posts=state.posts.filter(p=>p.id!==id);save();toast("Conteúdo excluído.");}
+  function deletePost(id){if(!confirm("Excluir este conteúdo do planejamento?"))return;state.posts=state.posts.filter(p=>p.id!==id);save();deleteCloudRecord("sge_posts",id).catch(err=>setCloudStatus("Erro ao excluir na nuvem: "+safeError(err),true));toast("Conteúdo excluído.");}
   $("closeEdit").onclick=$("cancelEdit").onclick=()=>$("editDialog").close();
   $("editForm").addEventListener("submit",e=>{e.preventDefault();const p=state.posts.find(x=>x.id===$("editId").value);if(p){p.title=$("editTitle").value.trim();p.platform=$("editPlatform").value;p.status=$("editStatus").value;p.date=$("editDate").value;p.notes=$("editNotes").value;save();toast("Alterações salvas.");}$("editDialog").close();});
   $("contentForm").addEventListener("submit",e=>{
@@ -71,7 +189,7 @@
     $("metricViews").textContent=fmt(m.views);$("metricReach").textContent=fmt(m.reach);$("metricFollowers").textContent=fmt(m.followers);$("metricPlanned").textContent=state.posts.filter(p=>p.status!=="Publicado").length;
     $("engagementRate").textContent=m.views?eng.toLocaleString("pt-BR",{maximumFractionDigits:2})+"%":"—";$("avgViews").textContent=count?fmt(Math.round(avg)):"—";$("metricCount").textContent=count;
     $("metricsList").innerHTML=count?state.metrics.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(m=>`<div style="padding:12px 0;border-bottom:1px solid var(--line);display:flex;gap:12px;justify-content:space-between;align-items:center"><div><b style="font-size:12px">${esc(m.title)}</b><div style="font-size:10px;color:var(--muted)">${esc(m.platform)} · ${m.date?new Date(m.date+"T12:00:00").toLocaleDateString("pt-BR"):"Sem data"} · ${fmt(m.views)} views</div></div><button class="row-action" data-metric-delete="${esc(m.id)}">Excluir</button></div>`).join(""):'<div class="list-empty">Ainda não há métricas cadastradas.</div>';
-    $("metricsList").querySelectorAll("[data-metric-delete]").forEach(b=>b.addEventListener("click",()=>{if(confirm("Excluir este registro?")){state.metrics=state.metrics.filter(x=>x.id!==b.dataset.metricDelete);save();toast("Registro excluído.");}}));
+    $("metricsList").querySelectorAll("[data-metric-delete]").forEach(b=>b.addEventListener("click",()=>{if(confirm("Excluir este registro?")){const id=b.dataset.metricDelete;state.metrics=state.metrics.filter(x=>x.id!==id);save();deleteCloudRecord("sge_metrics",id).catch(err=>setCloudStatus("Erro ao excluir na nuvem: "+safeError(err),true));toast("Registro excluído.");}}));
   }
   function renderAll(){renderPlanner();renderAnalytics();}
   const metricDialog=$("metricDialog");
