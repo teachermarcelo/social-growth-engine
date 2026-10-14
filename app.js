@@ -9,6 +9,7 @@
     : null;
   let currentUser = null;
   let cloudBusy = false;
+  let syncAgain = false;
   let state = loadState();
   let toastTimer;
   function loadState() {
@@ -39,7 +40,8 @@
     }
   }
   async function syncLocalChanges() {
-    if (!supabaseClient || !currentUser || cloudBusy) return;
+    if (!supabaseClient || !currentUser) return;
+    if (cloudBusy) { syncAgain = true; return; }
     cloudBusy = true;
     setCloudStatus("Salvando alterações na nuvem…");
     try {
@@ -50,7 +52,10 @@
         if (error) throw error;
       }
       setCloudStatus("Sincronizado com a nuvem · " + new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}));
-    } finally { cloudBusy = false; }
+    } finally {
+      cloudBusy = false;
+      if (syncAgain) { syncAgain = false; syncLocalChanges().catch(err => setCloudStatus("Erro ao sincronizar: " + safeError(err), true)); }
+    }
   }
   async function deleteCloudRecord(table, id) {
     if (!supabaseClient || !currentUser) return;
