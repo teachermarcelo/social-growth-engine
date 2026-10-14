@@ -11,6 +11,7 @@
       <div class="brand"><div class="brand-mark">SG</div><div><strong>Social Growth</strong><small>ENGINE · BETA</small></div></div>
       <nav>
         <button class="nav-link active" data-view="overview">▦ <span>Visão geral</span></button>
+        <button class="nav-link" data-view="discovery">⌕ <span>Descoberta de público</span></button>
         <button class="nav-link" data-view="planner">▣ <span>Planejamento</span></button>
         <button class="nav-link" data-view="content">✦ <span>Estúdio de conteúdo</span></button>
         <button class="nav-link" data-view="analytics">↗ <span>Análise de desempenho</span></button>
@@ -32,6 +33,26 @@
         <div class="two-col">
           <article class="panel"><div class="panel-head"><div><h3>Próximas publicações</h3><p>Seu calendário editorial</p></div><button class="text-btn" data-go="planner">Ver calendário</button></div><div id="upcomingList" class="list-empty">Nenhuma publicação planejada. Adicione uma ideia para começar.</div></article>
           <article class="panel"><div class="panel-head"><div><h3>Checklist de crescimento</h3><p>Boas práticas antes de publicar</p></div></div><ul class="checklist"><li><span>01</span><div><b>Gancho claro</b><small>Mostre rapidamente por que vale assistir.</small></div></li><li><span>02</span><div><b>Uma ideia central</b><small>Evite tentar falar de tudo no mesmo conteúdo.</small></div></li><li><span>03</span><div><b>Convite relevante</b><small>Estimule comentários ou compartilhamentos sem enganar.</small></div></li><li><span>04</span><div><b>Revisão de resultados</b><small>Compare conteúdos semelhantes após publicar.</small></div></li></ul></article>
+        </div>
+      </section>
+      <section class="view" id="view-discovery">
+        <div class="section-heading"><div><h2>Descoberta de público</h2><p>Defina um segmento e pesquise oportunidades em fontes públicas.</p></div><span class="pill pill-warning">Pesquisa assistida</span></div>
+        <div class="discovery-intro"><strong>Como funciona nesta fase</strong><p>O app cria termos de pesquisa a partir do seu segmento e abre resultados nas plataformas oficiais. Você analisa os resultados e salva as oportunidades relevantes. Ainda não há coleta automática de dados nem API social conectada.</p></div>
+        <div class="discovery-grid">
+          <form class="panel editor" id="segmentForm">
+            <h3>Definir segmento</h3>
+            <label>Segmento ou nicho<input id="segmentName" required placeholder="Ex.: inglês para adultos iniciantes"></label>
+            <label>Público que deseja alcançar<input id="segmentAudience" placeholder="Ex.: brasileiros que precisam do inglês para trabalhar"></label>
+            <div class="form-row"><label>Idioma<select id="segmentLanguage"><option value="pt-BR">Português</option><option value="en">Inglês</option><option value="es">Espanhol</option></select></label><label>Região<input id="segmentRegion" placeholder="Ex.: Brasil"></label></div>
+            <label>Objetivo<select id="segmentGoal"><option>Ensinar e informar</option><option>Construir comunidade</option><option>Gerar visitas ao perfil</option><option>Promover produto ou serviço</option></select></label>
+            <button class="btn btn-primary" type="submit">Salvar segmento e gerar pesquisas</button>
+            <p class="fine-print">Os termos sugeridos são hipóteses para pesquisa, não dados de audiência medidos.</p>
+          </form>
+          <div class="panel"><div class="panel-head"><div><h3>Termos de pesquisa</h3><p>Abra os resultados e avalie o que o público realmente procura.</p></div></div><div id="discoveryResults" class="discovery-results"><div class="list-empty">Cadastre um segmento para gerar pesquisas orientadas.</div></div></div>
+        </div>
+        <div class="two-col discovery-lower">
+          <article class="panel"><div class="panel-head"><div><h3>Segmentos salvos</h3><p>Seus públicos-alvo registrados</p></div></div><div id="segmentsList" class="discovery-results"><div class="list-empty">Nenhum segmento salvo.</div></div></article>
+          <article class="panel"><div class="panel-head"><div><h3>Oportunidades salvas</h3><p>Observações que podem virar conteúdo</p></div></div><div id="opportunitiesList" class="discovery-results"><div class="list-empty">Ainda não há oportunidades salvas.</div></div></article>
         </div>
       </section>
       <section class="view" id="view-planner">
