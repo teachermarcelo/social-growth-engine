@@ -13,7 +13,7 @@
   let state = loadState();
   let toastTimer;
   function loadState() {
-    try { const v = JSON.parse(localStorage.getItem(STORE) || "{}"); return {posts:Array.isArray(v.posts)?v.posts:[],metrics:Array.isArray(v.metrics)?v.metrics:[],segments:Array.isArray(v.segments)?v.segments:[],opportunities:Array.isArray(v.opportunities)?v.opportunities:[]}; }
+    try { const v = JSON.parse(localStorage.getItem(STORE) || "{}"); return {posts:Array.isArray(v.posts)?v.posts:[],metrics:Array.isArray(v.metrics)?v.metrics:[],segments:Array.isArray(v.segments)?v.segments:[],opportunities:Array.isArray(v.opportunities)?v.opportunities:[],campaigns:Array.isArray(v.campaigns)?v.campaigns:[]}; }
     catch { return {posts:[],metrics:[]}; }
   }
   function save() {
@@ -45,7 +45,7 @@
     cloudBusy = true;
     setCloudStatus("Salvando alterações na nuvem…");
     try {
-      for (const [table, items] of [["sge_posts", state.posts], ["sge_metrics", state.metrics], ["sge_segments", state.segments], ["sge_opportunities", state.opportunities]]) {
+      for (const [table, items] of [["sge_posts", state.posts], ["sge_metrics", state.metrics], ["sge_segments", state.segments], ["sge_opportunities", state.opportunities], ["sge_campaigns", state.campaigns]]) {
         if (!items.length) continue;
         const rows = items.map(item => ({id:item.id, user_id:currentUser.id, payload:item, updated_at:new Date().toISOString()}));
         const {error} = await supabaseClient.from(table).upsert(rows, {onConflict:"user_id,id"});
@@ -65,13 +65,14 @@
   async function loadAndMergeCloudData() {
     if (!supabaseClient || !currentUser) return;
     setCloudStatus("Carregando e mesclando registros…");
-    const [postsResult, metricsResult, segmentsResult, opportunitiesResult] = await Promise.all([
+    const [postsResult, metricsResult, segmentsResult, opportunitiesResult, campaignsResult] = await Promise.all([
       supabaseClient.from("sge_posts").select("payload").eq("user_id", currentUser.id),
       supabaseClient.from("sge_metrics").select("payload").eq("user_id", currentUser.id),
       supabaseClient.from("sge_segments").select("payload").eq("user_id", currentUser.id),
-      supabaseClient.from("sge_opportunities").select("payload").eq("user_id", currentUser.id)
+      supabaseClient.from("sge_opportunities").select("payload").eq("user_id", currentUser.id),
+      supabaseClient.from("sge_campaigns").select("payload").eq("user_id", currentUser.id)
     ]);
-    for (const result of [postsResult, metricsResult, segmentsResult, opportunitiesResult]) if (result.error) throw result.error;
+    for (const result of [postsResult, metricsResult, segmentsResult, opportunitiesResult, campaignsResult]) if (result.error) throw result.error;
     const merge = (local, remote) => {
       const byId = new Map(remote.map(row => [row.payload?.id, row.payload]).filter(([id,p]) => id && p));
       local.forEach(item => byId.set(item.id, item));
@@ -81,6 +82,7 @@
     state.metrics = merge(state.metrics, metricsResult.data || []);
     state.segments = merge(state.segments, segmentsResult.data || []);
     state.opportunities = merge(state.opportunities, opportunitiesResult.data || []);
+    state.campaigns = merge(state.campaigns, campaignsResult.data || []);
     localStorage.setItem(STORE, JSON.stringify(state));
     renderAll();
     await syncLocalChanges();
@@ -142,7 +144,7 @@
   function showView(name) {
     document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id==="view-"+name));
     document.querySelectorAll(".nav-link").forEach(v=>v.classList.toggle("active",v.dataset.view===name));
-    const titles={overview:"Visão geral",discovery:"Descoberta de público",planner:"Planejamento",content:"Estúdio de conteúdo",analytics:"Análise de desempenho",settings:"Configurações"};
+    const titles={overview:"Visão geral",discovery:"Descoberta de público",campaigns:"Campanhas",planner:"Planejamento",content:"Estúdio de conteúdo",analytics:"Análise de desempenho",settings:"Configurações"};
     $("pageTitle").textContent=titles[name]||"Visão geral"; $("sidebar").classList.remove("open"); window.scrollTo({top:0,behavior:"smooth"});
   }
   document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));
@@ -220,6 +222,31 @@
     results.querySelectorAll("[data-save-opportunity]").forEach(b=>b.addEventListener("click",()=>{const term=terms[Number(b.dataset.saveOpportunity)];if(state.opportunities.some(o=>o.term===term&&o.segmentId===segment.id)){toast("Esta oportunidade já está salva para o segmento.");return;}state.opportunities.push({id:uid(),term,segmentId:segment.id,segmentName:segment.name,platform:"Ambos",source:"Pesquisa oficial aberta manualmente",note:"Revisar resultados e registrar o que foi observado.",createdAt:new Date().toISOString()});save();toast("Oportunidade salva. Revise os resultados e suas observações.");}));
   }
   $("segmentForm").addEventListener("submit",e=>{e.preventDefault();const segment={id:uid(),name:$("segmentName").value.trim(),audience:$("segmentAudience").value.trim(),language:$("segmentLanguage").value,region:$("segmentRegion").value.trim(),goal:$("segmentGoal").value,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};if(!segment.name)return;state.segments.push(segment);save();renderSearchTerms(segment);toast("Segmento salvo e pesquisas sugeridas.");});
+
+  function renderCampaigns() {
+    const select=$("campaignSegment"),selected=select.value;
+    select.innerHTML='<option value="">Escolher segmento (opcional)</option>'+state.segments.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("");
+    if(state.segments.some(s=>s.id===selected))select.value=selected;
+    const list=$("campaignList");
+    list.innerHTML=state.campaigns.length?state.campaigns.slice().sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")).map(c=>`
+      <article class="campaign-card"><div class="campaign-card-head"><div><b>${esc(c.name)}</b><p>${esc(c.platform)} · ${esc(c.strategyLabel)} · ${esc(c.goal)}</p></div><span class="status-tag ${c.status==="Concluída"?"published":c.status==="Em andamento"?"ready":""}">${esc(c.status||"Planejada")}</span></div>
+      <div class="campaign-facts"><span>Orçamento: <b>R$ ${Number(c.budget||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}</b></span><span>Meta: <b>${c.target?fmt(c.target):"Não definida"}</b></span></div>
+      <p class="campaign-notes">${esc(c.notes||"Sem observações registradas.")}</p>
+      <div class="campaign-actions"><label>Status<select data-campaign-status="${esc(c.id)}"><option ${(c.status||"Planejada")==="Planejada"?"selected":""}>Planejada</option><option ${c.status==="Em andamento"?"selected":""}>Em andamento</option><option ${c.status==="Pausada"?"selected":""}>Pausada</option><option ${c.status==="Concluída"?"selected":""}>Concluída</option></select></label><button class="row-action" data-edit-campaign="${esc(c.id)}">Editar</button><button class="row-action" data-delete-campaign="${esc(c.id)}">Excluir</button></div></article>`).join(""):'<div class="list-empty">Nenhuma campanha criada.</div>';
+    list.querySelectorAll("[data-campaign-status]").forEach(el=>el.addEventListener("change",()=>{const c=state.campaigns.find(x=>x.id===el.dataset.campaignStatus);if(c){c.status=el.value;c.updatedAt=new Date().toISOString();save();toast("Status da campanha atualizado.");}}));
+    list.querySelectorAll("[data-edit-campaign]").forEach(b=>b.addEventListener("click",()=>{const c=state.campaigns.find(x=>x.id===b.dataset.editCampaign);if(!c)return;$("campaignName").value=c.name;$("campaignSegment").value=c.segmentId||"";$("campaignPlatform").value=c.platform;$("campaignStrategy").value=c.strategy;$("campaignGoal").value=c.goal;$("campaignStart").value=c.startDate||"";$("campaignEnd").value=c.endDate||"";$("campaignBudget").value=c.budget||0;$("campaignTarget").value=c.target||"";$("campaignNotes").value=c.notes||"";$("campaignForm").dataset.editId=c.id;$("campaignForm").querySelector("button[type=submit]").textContent="Salvar alterações";showView("campaigns");}));
+    list.querySelectorAll("[data-delete-campaign]").forEach(b=>b.addEventListener("click",()=>{if(!confirm("Excluir esta campanha?"))return;const id=b.dataset.deleteCampaign;state.campaigns=state.campaigns.filter(c=>c.id!==id);deleteCloudRecord("sge_campaigns",id).catch(err=>setCloudStatus("Erro ao excluir campanha na nuvem: "+safeError(err),true));save();toast("Campanha excluída.");}));
+  }
+  $("campaignForm").addEventListener("submit",e=>{
+    e.preventDefault();
+    const form=$("campaignForm"),existing=state.campaigns.find(c=>c.id===form.dataset.editId);
+    const segment=state.segments.find(s=>s.id===$("campaignSegment").value);
+    const strategy=$("campaignStrategy").value;
+    const item={id:existing?.id||uid(),name:$("campaignName").value.trim(),segmentId:segment?.id||"",segmentName:segment?.name||"",platform:$("campaignPlatform").value,strategy,strategyLabel:strategy==="organic"?"Orgânica":strategy==="paid"?"Anúncios pagos":"Orgânica + anúncios",goal:$("campaignGoal").value,startDate:$("campaignStart").value,endDate:$("campaignEnd").value,budget:Number($("campaignBudget").value||0),target:Number($("campaignTarget").value||0),notes:$("campaignNotes").value.trim(),status:existing?.status||"Planejada",createdAt:existing?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
+    if(item.startDate&&item.endDate&&item.endDate<item.startDate){toast("A data final não pode ser anterior à inicial.");return;}
+    if(existing)state.campaigns=state.campaigns.map(c=>c.id===existing.id?item:c);else state.campaigns.push(item);
+    delete form.dataset.editId;form.reset();$("campaignBudget").value="0";form.querySelector("button[type=submit]").textContent="Salvar campanha";save();toast(existing?"Campanha atualizada.":"Campanha salva.");
+  });
   function metricValues(){return state.metrics.reduce((a,m)=>{a.views+=m.views||0;a.reach+=m.reach||0;a.followers+=m.followers||0;a.likes+=m.likes||0;a.comments+=m.comments||0;a.shares+=m.shares||0;return a;},{views:0,reach:0,followers:0,likes:0,comments:0,shares:0});}
   function renderAnalytics(){
     const m=metricValues(),count=state.metrics.length,eng=(m.views?100*(m.likes+m.comments+m.shares)/m.views:0),avg=count?m.views/count:0;
@@ -228,7 +255,7 @@
     $("metricsList").innerHTML=count?state.metrics.slice().sort((a,b)=>(b.date||"").localeCompare(a.date||"")).map(m=>`<div style="padding:12px 0;border-bottom:1px solid var(--line);display:flex;gap:12px;justify-content:space-between;align-items:center"><div><b style="font-size:12px">${esc(m.title)}</b><div style="font-size:10px;color:var(--muted)">${esc(m.platform)} · ${m.date?new Date(m.date+"T12:00:00").toLocaleDateString("pt-BR"):"Sem data"} · ${fmt(m.views)} views</div></div><button class="row-action" data-metric-delete="${esc(m.id)}">Excluir</button></div>`).join(""):'<div class="list-empty">Ainda não há métricas cadastradas.</div>';
     $("metricsList").querySelectorAll("[data-metric-delete]").forEach(b=>b.addEventListener("click",()=>{if(confirm("Excluir este registro?")){const id=b.dataset.metricDelete;state.metrics=state.metrics.filter(x=>x.id!==id);save();deleteCloudRecord("sge_metrics",id).catch(err=>setCloudStatus("Erro ao excluir na nuvem: "+safeError(err),true));toast("Registro excluído.");}}));
   }
-  function renderAll(){renderPlanner();renderAnalytics();renderDiscovery();}
+  function renderAll(){renderPlanner();renderAnalytics();renderDiscovery();renderCampaigns();}
   const metricDialog=$("metricDialog");
   $("addMetricBtn").onclick=()=>{ $("metricDate").value=new Date().toISOString().slice(0,10);metricDialog.showModal(); };
   $("closeMetric").onclick=$("cancelMetric").onclick=()=>metricDialog.close();
@@ -238,8 +265,8 @@
   });
   function download(name,content,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);}
   $("exportBackup").onclick=()=>download("social-growth-backup.json",JSON.stringify({schemaVersion:1,exportedAt:new Date().toISOString(),...state},null,2),"application/json");
-  $("importBackup").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.posts)||!Array.isArray(data.metrics))throw Error("Formato inválido");if(!confirm("Importar este backup substituirá os dados atuais deste navegador. Deseja continuar?"))return;state={posts:data.posts,metrics:data.metrics,segments:Array.isArray(data.segments)?data.segments:[],opportunities:Array.isArray(data.opportunities)?data.opportunities:[]};save();toast("Backup importado.");}catch(err){toast("Arquivo inválido. Nenhum dado foi importado.");}finally{e.target.value="";}});
-  $("clearData").onclick=()=>{if(confirm("Isso apagará os conteúdos e métricas salvos neste navegador. Exporte um backup antes. Continuar?")){state={posts:[],metrics:[],segments:[],opportunities:[]};save();toast("Dados locais apagados.");}};
+  $("importBackup").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.posts)||!Array.isArray(data.metrics))throw Error("Formato inválido");if(!confirm("Importar este backup substituirá os dados atuais deste navegador. Deseja continuar?"))return;state={posts:data.posts,metrics:data.metrics,segments:Array.isArray(data.segments)?data.segments:[],opportunities:Array.isArray(data.opportunities)?data.opportunities:[],campaigns:Array.isArray(data.campaigns)?data.campaigns:[]};save();toast("Backup importado.");}catch(err){toast("Arquivo inválido. Nenhum dado foi importado.");}finally{e.target.value="";}});
+  $("clearData").onclick=()=>{if(confirm("Isso apagará os conteúdos e métricas salvos neste navegador. Exporte um backup antes. Continuar?")){state={posts:[],metrics:[],segments:[],opportunities:[],campaigns:[]};save();toast("Dados locais apagados.");}};
   $("exportCsv").onclick=()=>{if(!state.metrics.length){toast("Não há métricas para exportar.");return;}const cols=["title","platform","date","views","reach","likes","comments","shares","followers","retention"];const quote=v=>'"'+String(v??"").replace(/"/g,'""')+'"';const csv=[cols.join(";"),...state.metrics.map(m=>cols.map(k=>quote(m[k])).join(";"))].join("\r\n");download("social-growth-metricas.csv","\ufeff"+csv,"text/csv;charset=utf-8");};
   renderAll();
 })();
