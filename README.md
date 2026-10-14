@@ -6,12 +6,13 @@ Painel semiautomático para planejar conteúdo de Instagram e YouTube, gerar ide
 
 - Interface responsiva com navegação por seções.
 - Planejamento de conteúdo com filtros, edição e exclusão.
+- Fase 1: cadastro de segmentos e geração de termos de pesquisa, links para resultados públicos do YouTube e Instagram, registro de oportunidades e envio de oportunidades ao planejador.
 - Gerador local de sugestões de ganchos e chamadas para ação.
 - Registro manual de visualizações, alcance, curtidas, comentários, compartilhamentos, seguidores ganhos e retenção.
 - Indicadores agregados e exportação CSV.
 - Backup e restauração JSON.
 - Dados guardados no `localStorage` do navegador e sincronização opcional com Supabase por conta autenticada.
-- Tabelas exclusivas `sge_posts` e `sge_metrics`, com RLS para separar os dados de cada usuário.
+- Tabelas exclusivas `sge_posts`, `sge_metrics`, `sge_segments` e `sge_opportunities`, com RLS para separar os dados de cada usuário.
 - Mesclagem de dados locais e da nuvem no login; exportação JSON continua disponível como backup.
 - **Não há conexão configurada com Instagram/Meta ou YouTube APIs.** Nenhuma publicação é enviada automaticamente e nenhum indicador é obtido diretamente das plataformas.
 
@@ -52,7 +53,7 @@ A taxa agregada de engajamento por visualização é calculada como:
 
 ## Supabase: configuração aplicada
 
-O app usa o cliente JavaScript oficial via CDN, o Project URL e uma chave publicável (não secreta). O esquema foi criado no projeto Supabase exclusivo `social-growth-engine`. As tabelas `sge_posts` e `sge_metrics` têm Row Level Security (RLS) e políticas para permitir que cada usuário autenticado leia e altere somente os próprios registros.
+O app usa o cliente JavaScript oficial via CDN, o Project URL e uma chave publicável (não secreta). O esquema foi criado no projeto Supabase exclusivo `social-growth-engine`. As tabelas `sge_posts`, `sge_metrics`, `sge_segments` e `sge_opportunities` têm Row Level Security (RLS) e políticas para permitir que cada usuário autenticado leia e altere somente os próprios registros.
 
 1. Abra **Configurações → Sincronização na nuvem**.
 2. Crie uma conta com e-mail e senha; se a confirmação por e-mail estiver ativa, confirme o endereço antes de entrar.
@@ -83,6 +84,6 @@ A sincronização foi implementada, mas ainda depende de um teste no navegador c
 
 - `localStorage` é específico do navegador e do dispositivo; não sincroniza entre computador e celular.
 - Os dados podem ser perdidos ao limpar o armazenamento do navegador. Exporte backups regularmente.
-- As sugestões são modelos locais baseados no tema, não um modelo de IA conectado.
+- As sugestões de descoberta são termos de pesquisa derivados localmente do segmento; o app abre resultados oficiais para inspeção humana. Não há coleta automática de conteúdo nem um modelo de IA conectado.
 - GitHub Pages hospeda conteúdo estático; não é um servidor seguro para armazenar credenciais nem executar tarefas backend privadas.
-- Esta versão ainda não foi conectada a contas sociais nem submetida a testes de API externa.
+- A descoberta desta fase é assistida por links públicos; não há API social conectada nem coleta automática. A sincronização das novas tabelas precisa ser validada no navegador com uma conta real.
