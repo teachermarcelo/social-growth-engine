@@ -10,7 +10,9 @@ Painel semiautomático para planejar conteúdo de Instagram e YouTube, gerar ide
 - Registro manual de visualizações, alcance, curtidas, comentários, compartilhamentos, seguidores ganhos e retenção.
 - Indicadores agregados e exportação CSV.
 - Backup e restauração JSON.
-- Dados guardados no `localStorage` do navegador atual.
+- Dados guardados no `localStorage` do navegador e sincronização opcional com Supabase por conta autenticada.
+- Tabelas exclusivas `sge_posts` e `sge_metrics`, com RLS para separar os dados de cada usuário.
+- Mesclagem de dados locais e da nuvem no login; exportação JSON continua disponível como backup.
 - **Não há conexão configurada com Instagram/Meta ou YouTube APIs.** Nenhuma publicação é enviada automaticamente e nenhum indicador é obtido diretamente das plataformas.
 
 ## Executar localmente
@@ -47,6 +49,17 @@ A taxa agregada de engajamento por visualização é calculada como:
 `(curtidas + comentários + compartilhamentos) / visualizações × 100`
 
 É uma métrica de comparação simplificada, não necessariamente igual às taxas oficiais de cada plataforma. O alcance pode não ser equivalente a visualizações. Evite comparar formatos, períodos e públicos muito diferentes.
+
+## Supabase: configuração aplicada
+
+O app usa o cliente JavaScript oficial via CDN, o Project URL e uma chave publicável (não secreta). O esquema foi criado no projeto Supabase exclusivo `social-growth-engine`. As tabelas `sge_posts` e `sge_metrics` têm Row Level Security (RLS) e políticas para permitir que cada usuário autenticado leia e altere somente os próprios registros.
+
+1. Abra **Configurações → Sincronização na nuvem**.
+2. Crie uma conta com e-mail e senha; se a confirmação por e-mail estiver ativa, confirme o endereço antes de entrar.
+3. Ao entrar, o app mescla os dados locais com os registros remotos por ID e envia os registros locais para a nuvem.
+4. Continue exportando backups JSON periodicamente.
+
+A sincronização foi implementada, mas ainda depende de um teste no navegador com uma conta real. O GitHub Pages é estático; a chave publicável é destinada ao navegador, e nenhum segredo `service_role`, senha de banco ou token privado foi adicionado ao repositório.
 
 ## Próximas etapas para integração real
 
