@@ -95,3 +95,27 @@ grant all on public.sge_meta_connections to service_role;
 grant all on public.sge_campaigns to service_role;
 grant all on public.sge_metrics to service_role;
 grant all on public.sge_automation_rules to service_role;
+
+
+-- User-owned browser data is stored separately from private OAuth tokens.
+create table if not exists public.sge_app_records (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  record_type text not null check (record_type in ('posts','metrics','segments','opportunities','campaigns')),
+  record_id text not null,
+  payload jsonb not null,
+  updated_at timestamptz not null default now(),
+  unique (user_id, record_type, record_id)
+);
+alter table public.sge_app_records enable row level security;
+revoke all on public.sge_app_records from anon;
+grant select, insert, update, delete on public.sge_app_records to authenticated;
+grant all on public.sge_app_records to service_role;
+drop policy if exists sge_app_records_select_own on public.sge_app_records;
+drop policy if exists sge_app_records_insert_own on public.sge_app_records;
+drop policy if exists sge_app_records_update_own on public.sge_app_records;
+drop policy if exists sge_app_records_delete_own on public.sge_app_records;
+create policy sge_app_records_select_own on public.sge_app_records for select to authenticated using (auth.uid() = user_id);
+create policy sge_app_records_insert_own on public.sge_app_records for insert to authenticated with check (auth.uid() = user_id);
+create policy sge_app_records_update_own on public.sge_app_records for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy sge_app_records_delete_own on public.sge_app_records for delete to authenticated using (auth.uid() = user_id);
