@@ -131,7 +131,8 @@
       <div id="gtCampaignChecks" class="gt-checks"></div>
       <div id="gtCampaignStatus" class="gt-status warn" role="status">Preencha os campos para verificar a preparação.</div>
       <div class="gt-banner">Segurança: esta versão não cria nem ativa anúncios. Orçamento, segmentação e links são apenas um plano salvo. A publicação de campanhas exigirá integração oficial, permissões e confirmação explícita.</div>`;
-    form.insertAdjacentElement("afterend", panel);
+    const submitButton = form.querySelector("button[type=submit]");
+    if (submitButton) form.insertBefore(panel, submitButton); else form.appendChild(panel);
     const ids = ["campaignName","campaignStrategy","campaignBudget","campaignDestination","campaignRegion","campaignAge","campaignAudience","campaignStart","campaignEnd","campaignPostUrl"];
     ids.forEach(id => $(id)?.addEventListener("input", refreshCampaignChecklist));
     ids.forEach(id => $(id)?.addEventListener("change", refreshCampaignChecklist));
