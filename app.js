@@ -47,10 +47,10 @@
     cloudBusy = true;
     setCloudStatus("Salvando alterações na nuvem…");
     try {
-      for (const [table, items] of [["sge_posts", state.posts], ["sge_metrics", state.metrics], ["sge_segments", state.segments], ["sge_opportunities", state.opportunities], ["sge_campaigns", state.campaigns]]) {
-        if (!items.length) continue;
-        const rows = items.map(item => ({id:item.id, user_id:currentUser.id, payload:item, updated_at:new Date().toISOString()}));
-        const {error} = await supabaseClient.from(table).upsert(rows, {onConflict:"user_id,id"});
+      const records = [["posts", state.posts], ["metrics", state.metrics], ["segments", state.segments], ["opportunities", state.opportunities], ["campaigns", state.campaigns]]
+        .flatMap(([record_type, items]) => items.map(item => ({user_id:currentUser.id, record_type, record_id:String(item.id), payload:item, updated_at:new Date().toISOString()})));
+      if (records.length) {
+        const {error} = await supabaseClient.from("sge_app_records").upsert(records, {onConflict:"user_id,record_type,record_id"});
         if (error) throw error;
       }
       setCloudStatus("Sincronizado com a nuvem · " + new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}));
@@ -61,30 +61,26 @@
   }
   async function deleteCloudRecord(table, id) {
     if (!supabaseClient || !currentUser) return;
-    const {error} = await supabaseClient.from(table).delete().eq("id", id).eq("user_id", currentUser.id);
+    const recordType = String(table).replace(/^sge_/, "");
+    const {error} = await supabaseClient.from("sge_app_records").delete().eq("record_type", recordType).eq("record_id", String(id)).eq("user_id", currentUser.id);
     if (error) throw error;
   }
   async function loadAndMergeCloudData() {
     if (!supabaseClient || !currentUser) return;
     setCloudStatus("Carregando e mesclando registros…");
-    const [postsResult, metricsResult, segmentsResult, opportunitiesResult, campaignsResult] = await Promise.all([
-      supabaseClient.from("sge_posts").select("payload").eq("user_id", currentUser.id),
-      supabaseClient.from("sge_metrics").select("payload").eq("user_id", currentUser.id),
-      supabaseClient.from("sge_segments").select("payload").eq("user_id", currentUser.id),
-      supabaseClient.from("sge_opportunities").select("payload").eq("user_id", currentUser.id),
-      supabaseClient.from("sge_campaigns").select("payload").eq("user_id", currentUser.id)
-    ]);
-    for (const result of [postsResult, metricsResult, segmentsResult, opportunitiesResult, campaignsResult]) if (result.error) throw result.error;
+    const {data:remoteRecords,error} = await supabaseClient.from("sge_app_records").select("record_type,record_id,payload").eq("user_id", currentUser.id);
+    if (error) throw error;
     const merge = (local, remote) => {
-      const byId = new Map(remote.map(row => [row.payload?.id, row.payload]).filter(([id,p]) => id && p));
+      const byId = new Map(remote.map(row => [row.payload?.id || row.record_id, row.payload]).filter(([id,p]) => id && p));
       local.forEach(item => byId.set(item.id, item));
       return [...byId.values()];
     };
-    state.posts = merge(state.posts, postsResult.data || []);
-    state.metrics = merge(state.metrics, metricsResult.data || []);
-    state.segments = merge(state.segments, segmentsResult.data || []);
-    state.opportunities = merge(state.opportunities, opportunitiesResult.data || []);
-    state.campaigns = merge(state.campaigns, campaignsResult.data || []);
+    const records = remoteRecords || [];
+    state.posts = merge(state.posts, records.filter(r=>r.record_type==="posts"));
+    state.metrics = merge(state.metrics, records.filter(r=>r.record_type==="metrics"));
+    state.segments = merge(state.segments, records.filter(r=>r.record_type==="segments"));
+    state.opportunities = merge(state.opportunities, records.filter(r=>r.record_type==="opportunities"));
+    state.campaigns = merge(state.campaigns, records.filter(r=>r.record_type==="campaigns"));
     localStorage.setItem(STORE, JSON.stringify(state));
     renderAll();
     await syncLocalChanges();
