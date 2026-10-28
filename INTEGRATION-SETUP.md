@@ -51,3 +51,43 @@ O repositório `teachermarcelo/social-growth-engine` já contém um painel está
 ## Observação sobre banco existente
 
 A interface exige configuração explícita do projeto Supabase. Para esta implantação, use o projeto `ingles-para-nacoes` (`rvgcniaowzmsudzliozf`). As tabelas `sge_*` foram criadas com RLS e sem políticas de cliente; apenas a função backend com service role pode acessá-las nesta fase. Isso protege os tokens, mas o dashboard ainda precisa de uma camada de backend/API para ler e gravar campanhas e métricas.
+
+
+## Meta Marketing API — campanhas pagas (fase inicial, estrutura pausada)
+
+A função `meta-ads` está publicada no projeto Supabase `rvgcniaowzmsudzliozf` e o painel contém uma seção para conectar contas de anúncios. A função ainda depende de credenciais e permissões configuradas pelo proprietário no Meta for Developers.
+
+### Redirect URI e secrets
+
+Cadastre esta URI de redirecionamento no produto Facebook Login/OAuth do aplicativo Meta e copie exatamente a mesma URL para o secret `META_ADS_REDIRECT_URI`:
+
+```
+https://rvgcniaowzmsudzliozf.supabase.co/functions/v1/meta-ads?action=callback
+```
+
+Secrets necessários nas Edge Functions do Supabase:
+- `META_APP_ID` — App ID do aplicativo Meta.
+- `META_APP_SECRET` — App Secret do aplicativo Meta.
+- `META_ADS_REDIRECT_URI` — URI exata acima.
+- `META_TOKEN_ENCRYPTION_KEY` — reutiliza a chave AES-GCM de 32 bytes em Base64 usada para criptografar tokens; nunca expor no browser.
+- `APP_BASE_URL` — `https://teachermarcelo.github.io/social-growth-engine/`.
+- `META_GRAPH_API_VERSION` — opcional; o código usa `v25.0` por padrão.
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_ANON_KEY` são fornecidos pelo runtime Supabase.
+
+Solicita apenas `ads_read` e `ads_management` para esta fase. O aplicativo pode precisar de App Review/nível de acesso adequado para uso fora dos próprios ativos. O acesso é decidido pela Meta, não pelo código.
+
+### O que a primeira fase faz
+
+1. OAuth de Facebook/Meta com state aleatório de uso único e expiração curta.
+2. Descobre as contas de anúncios às quais o usuário autenticado tem acesso.
+3. Guarda o token criptografado no backend; as tabelas privadas têm RLS e só concedem acesso ao `service_role`.
+4. Depois de uma confirmação textual explícita, cria uma campanha de tráfego e um conjunto em estado `PAUSED`, com orçamento vitalício e datas obrigatórias.
+5. O orçamento aceito nesta primeira versão é de R$ 20 a R$ 10.000 por estrutura, com período de até 90 dias; apenas contas em BRL e com status ativo são aceitas.
+6. A segmentação enviada inicialmente é Brasil + faixa etária (18–65). Região/interesses digitados no formulário são guardados como notas, não aplicados como targeting.
+7. Não cria criativo nem anúncio, não ativa campanhas e não executa ações de ativação. A fase de criativos, revisão final e ativação com nova confirmação explícita ainda precisa ser implementada.
+
+### Importante
+
+A criação de uma campanha/conjunto pausados é uma chamada real à API e cria objetos no Gerenciador de Anúncios, mas não deve entregar anúncios sem criativo/anúncio e sem ativação. Verifique os objetos no Ads Manager. Não tente novamente se a função indicar criação parcial; confira primeiro o ID da campanha retornado para evitar duplicação.
+
+A migration `20261028_sge_meta_ads.sql` adiciona somente tabelas novas com prefixo `sge_meta_ads_`; ela foi aplicada ao projeto `ingles-para-nacoes` sem alterar tabelas existentes.
