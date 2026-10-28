@@ -1,0 +1,25 @@
+name: Validate Social Growth Engine
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check browser JavaScript syntax
+        run: node --check app.js
+      - name: Validate integration files exist
+        run: |
+          test -f supabase/functions/meta-oauth/index.ts
+          test -f supabase/migrations/20261028_sge_meta_oauth.sql
+          test -f INTEGRATION-SETUP.md
