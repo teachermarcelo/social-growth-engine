@@ -168,7 +168,7 @@
   function showView(name) {
     document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id==="view-"+name));
     document.querySelectorAll(".nav-link").forEach(v=>v.classList.toggle("active",v.dataset.view===name));
-    const titles={overview:"Visão geral",discovery:"Descoberta de público",campaigns:"Campanhas",planner:"Planejamento",content:"Estúdio de conteúdo",analytics:"Análise de desempenho",settings:"Configurações"};
+    const titles={overview:"Visão geral",accounts:"Contas e publicações",discovery:"Descoberta de público",campaigns:"Campanhas e tráfego",planner:"Planejamento",content:"Estúdio de conteúdo",analytics:"Análise de desempenho",settings:"Configurações"};
     $("pageTitle").textContent=titles[name]||"Visão geral"; $("sidebar").classList.remove("open"); window.scrollTo({top:0,behavior:"smooth"});
   }
   document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));
@@ -255,10 +255,10 @@
     list.innerHTML=state.campaigns.length?state.campaigns.slice().sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")).map(c=>`
       <article class="campaign-card"><div class="campaign-card-head"><div><b>${esc(c.name)}</b><p>${esc(c.platform)} · ${esc(c.strategyLabel)} · ${esc(c.goal)}</p></div><span class="status-tag ${c.status==="Concluída"?"published":c.status==="Em andamento"?"ready":""}">${esc(c.status||"Planejada")}</span></div>
       <div class="campaign-facts"><span>Orçamento: <b>R$ ${Number(c.budget||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}</b></span><span>Meta: <b>${c.target?fmt(c.target):"Não definida"}</b></span></div>
-      <p class="campaign-notes">${esc(c.notes||"Sem observações registradas.")}</p>
+      <p class="campaign-notes">${c.destination?`Destino: <a href="${esc(c.destination)}" target="_blank" rel="noopener noreferrer">abrir link ↗</a><br>`:""}${c.region?`Região: ${esc(c.region)} · `:""}${c.age?`Faixa etária: ${esc(c.age)}<br>`:""}${c.postUrl?`Publicação: <a href="${esc(c.postUrl)}" target="_blank" rel="noopener noreferrer">abrir post ↗</a><br>`:""}${c.audience?`${esc(c.audience)}<br>`:""}${esc(c.notes||"Sem observações registradas.")}</p>
       <div class="campaign-actions"><label>Status<select data-campaign-status="${esc(c.id)}"><option ${(c.status||"Planejada")==="Planejada"?"selected":""}>Planejada</option><option ${c.status==="Em andamento"?"selected":""}>Em andamento</option><option ${c.status==="Pausada"?"selected":""}>Pausada</option><option ${c.status==="Concluída"?"selected":""}>Concluída</option></select></label><button class="row-action" data-edit-campaign="${esc(c.id)}">Editar</button><button class="row-action" data-delete-campaign="${esc(c.id)}">Excluir</button></div></article>`).join(""):'<div class="list-empty">Nenhuma campanha criada.</div>';
     list.querySelectorAll("[data-campaign-status]").forEach(el=>el.addEventListener("change",()=>{const c=state.campaigns.find(x=>x.id===el.dataset.campaignStatus);if(c){c.status=el.value;c.updatedAt=new Date().toISOString();save();toast("Status da campanha atualizado.");}}));
-    list.querySelectorAll("[data-edit-campaign]").forEach(b=>b.addEventListener("click",()=>{const c=state.campaigns.find(x=>x.id===b.dataset.editCampaign);if(!c)return;$("campaignName").value=c.name;$("campaignSegment").value=c.segmentId||"";$("campaignPlatform").value=c.platform;$("campaignStrategy").value=c.strategy;$("campaignGoal").value=c.goal;$("campaignStart").value=c.startDate||"";$("campaignEnd").value=c.endDate||"";$("campaignBudget").value=c.budget||0;$("campaignTarget").value=c.target||"";$("campaignNotes").value=c.notes||"";$("campaignForm").dataset.editId=c.id;$("campaignForm").querySelector("button[type=submit]").textContent="Salvar alterações";showView("campaigns");}));
+    list.querySelectorAll("[data-edit-campaign]").forEach(b=>b.addEventListener("click",()=>{const c=state.campaigns.find(x=>x.id===b.dataset.editCampaign);if(!c)return;$("campaignName").value=c.name;$("campaignSegment").value=c.segmentId||"";$("campaignPlatform").value=c.platform;$("campaignStrategy").value=c.strategy;$("campaignGoal").value=c.goal;$("campaignStart").value=c.startDate||"";$("campaignEnd").value=c.endDate||"";$("campaignBudget").value=c.budget||0;$("campaignTarget").value=c.target||"";$("campaignDestination").value=c.destination||"";$("campaignRegion").value=c.region||"";$("campaignAge").value=c.age||"";$("campaignAudience").value=c.audience||"";$("campaignPostUrl").value=c.postUrl||"";$("campaignNotes").value=c.notes||"";$("campaignForm").dataset.editId=c.id;$("campaignForm").querySelector("button[type=submit]").textContent="Salvar alterações";showView("campaigns");}));
     list.querySelectorAll("[data-delete-campaign]").forEach(b=>b.addEventListener("click",()=>{if(!confirm("Excluir esta campanha?"))return;const id=b.dataset.deleteCampaign;state.campaigns=state.campaigns.filter(c=>c.id!==id);deleteCloudRecord("sge_campaigns",id).catch(err=>setCloudStatus("Erro ao excluir campanha na nuvem: "+safeError(err),true));save();toast("Campanha excluída.");}));
   }
   $("campaignForm").addEventListener("submit",e=>{
@@ -266,7 +266,7 @@
     const form=$("campaignForm"),existing=state.campaigns.find(c=>c.id===form.dataset.editId);
     const segment=state.segments.find(s=>s.id===$("campaignSegment").value);
     const strategy=$("campaignStrategy").value;
-    const item={id:existing?.id||uid(),name:$("campaignName").value.trim(),segmentId:segment?.id||"",segmentName:segment?.name||"",platform:$("campaignPlatform").value,strategy,strategyLabel:strategy==="organic"?"Orgânica":strategy==="paid"?"Anúncios pagos":"Orgânica + anúncios",goal:$("campaignGoal").value,startDate:$("campaignStart").value,endDate:$("campaignEnd").value,budget:Number($("campaignBudget").value||0),target:Number($("campaignTarget").value||0),notes:$("campaignNotes").value.trim(),status:existing?.status||"Planejada",createdAt:existing?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
+    const item={id:existing?.id||uid(),name:$("campaignName").value.trim(),segmentId:segment?.id||"",segmentName:segment?.name||"",platform:$("campaignPlatform").value,strategy,strategyLabel:strategy==="organic"?"Orgânica":strategy==="paid"?"Anúncios pagos":"Orgânica + anúncios",goal:$("campaignGoal").value,startDate:$("campaignStart").value,endDate:$("campaignEnd").value,budget:Number($("campaignBudget").value||0),target:Number($("campaignTarget").value||0),destination:$("campaignDestination").value.trim(),region:$("campaignRegion").value.trim(),age:$("campaignAge").value.trim(),audience:$("campaignAudience").value.trim(),postUrl:$("campaignPostUrl").value.trim(),notes:$("campaignNotes").value.trim(),status:existing?.status||"Planejada",approvalRequired:true,createdAt:existing?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
     if(item.startDate&&item.endDate&&item.endDate<item.startDate){toast("A data final não pode ser anterior à inicial.");return;}
     if(existing)state.campaigns=state.campaigns.map(c=>c.id===existing.id?item:c);else state.campaigns.push(item);
     delete form.dataset.editId;form.reset();$("campaignBudget").value="0";form.querySelector("button[type=submit]").textContent="Salvar campanha";save();toast(existing?"Campanha atualizada.":"Campanha salva.");
@@ -364,5 +364,75 @@
       }
     });
   }
+  // Instagram account library: browser calls only the authenticated Edge Function.
+  const accountsStatus = $("instagramAccountsStatus");
+  const accountsList = $("instagramAccountsList");
+  const postsStatus = $("instagramPostsStatus");
+  const postsGrid = $("instagramPostsGrid");
+  const selectedAccountLabel = $("instagramSelectedAccount");
+  let instagramAccounts = [];
+  let selectedInstagramAccountId = "";
+  function metaEndpointFor(action) {
+    const saved = localStorage.getItem(META_ENDPOINT_STORE) || "";
+    if (!saved) throw new Error("Configure a URL da função Meta em Configurações primeiro.");
+    const endpoint = new URL(saved);
+    if (endpoint.protocol !== "https:" || !endpoint.pathname.endsWith("/functions/v1/meta-oauth")) throw new Error("A URL da função Meta não parece válida.");
+    endpoint.searchParams.set("action", action);
+    return endpoint;
+  }
+  async function callMeta(action, extra = {}) {
+    if (!supabaseClient) throw new Error("Configure o Supabase em Configurações primeiro.");
+    const {data:{session},error} = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    if (!session?.access_token) throw new Error("Entre na sua conta do Social Growth Engine em Configurações.");
+    const endpoint = metaEndpointFor(action);
+    Object.entries(extra).forEach(([key,value])=>endpoint.searchParams.set(key,String(value)));
+    const response = await fetch(endpoint.toString(), {headers:{Authorization:"Bearer "+session.access_token}});
+    const payload = await response.json().catch(()=>({}));
+    if (!response.ok) throw new Error(payload.error || "Falha ao consultar a API Meta.");
+    return payload;
+  }
+  function renderInstagramAccounts() {
+    if (!accountsList) return;
+    if (!instagramAccounts.length) { accountsList.innerHTML = '<div class="list-empty">Nenhuma conta conectada foi encontrada. Use “Conectar conta” para autorizar uma conta profissional.</div>'; return; }
+    accountsList.innerHTML = instagramAccounts.map(a => '<button type="button" class="instagram-account-card '+(a.instagram_user_id===selectedInstagramAccountId?"selected":"")+'" data-select-instagram-account="'+esc(a.instagram_user_id)+'"><span class="account-avatar">◎</span><span class="account-info"><b>@'+esc(a.instagram_username||"Instagram")+'</b><small>Conectada em '+(a.connected_at?new Date(a.connected_at).toLocaleDateString("pt-BR"):"data indisponível")+'</small></span><span class="account-select-mark">→</span></button>').join("");
+    accountsList.querySelectorAll("[data-select-instagram-account]").forEach(b=>b.addEventListener("click",()=>loadInstagramPosts(b.dataset.selectInstagramAccount)));
+  }
+  async function loadInstagramAccounts() {
+    if (!accountsStatus) return;
+    accountsStatus.classList.remove("error"); accountsStatus.textContent = "Carregando contas autorizadas…";
+    if (postsGrid) postsGrid.innerHTML = '<div class="list-empty">Selecione uma conta para carregar as publicações.</div>';
+    try {
+      const payload = await callMeta("accounts"); instagramAccounts = Array.isArray(payload.accounts)?payload.accounts:[];
+      if (!instagramAccounts.some(a=>a.instagram_user_id===selectedInstagramAccountId)) selectedInstagramAccountId = instagramAccounts[0]?.instagram_user_id || "";
+      renderInstagramAccounts(); accountsStatus.textContent = instagramAccounts.length ? instagramAccounts.length+" conta(s) autorizada(s)." : "Nenhuma conta conectada. Clique em “Conectar conta”.";
+      if (selectedInstagramAccountId) await loadInstagramPosts(selectedInstagramAccountId);
+    } catch(err) { accountsStatus.textContent = safeError(err); accountsStatus.classList.add("error"); renderInstagramAccounts(); }
+  }
+  async function loadInstagramPosts(accountId) {
+    selectedInstagramAccountId = accountId;
+    const account = instagramAccounts.find(a=>a.instagram_user_id===accountId);
+    if (selectedAccountLabel) selectedAccountLabel.textContent = account ? "@"+(account.instagram_username||"Instagram") : "Conta selecionada";
+    renderInstagramAccounts(); if (!postsStatus || !postsGrid) return;
+    postsStatus.textContent = "Carregando publicações autorizadas…"; postsGrid.innerHTML = '<div class="list-empty">Consultando o Instagram…</div>';
+    try {
+      const payload = await callMeta("posts",{account_id:accountId}); const posts = Array.isArray(payload.posts)?payload.posts:[];
+      postsStatus.textContent = posts.length+" publicação(ões) retornada(s) pela API.";
+      postsGrid.innerHTML = posts.length ? posts.map(p=>{
+        const image = p.thumbnail_url || p.media_url || ""; const safeImage = /^https?:\/\//i.test(image) ? esc(image) : "";
+        const caption = String(p.caption||"").slice(0,220); const date = p.timestamp ? new Date(p.timestamp).toLocaleDateString("pt-BR") : "Data indisponível";
+        return '<article class="instagram-post-card">'+(safeImage?'<img loading="lazy" src="'+safeImage+'" alt="Prévia da publicação" referrerpolicy="no-referrer">':'<div class="post-image-placeholder">◎</div>')+
+          '<div class="instagram-post-body"><span class="pill">'+esc(p.media_type||"POST")+'</span><small>'+esc(date)+'</small><p>'+esc(caption||"Sem legenda")+(caption.length>=220?"…":"")+'</p><div class="post-stats"><span>♡ '+(p.like_count??"—")+'</span><span>◌ '+(p.comments_count??"—")+'</span></div><div class="button-row"><a class="btn btn-secondary" href="'+esc(p.permalink||"#")+'" target="_blank" rel="noopener noreferrer">Abrir post ↗</a><button class="btn btn-primary" type="button" data-use-post="'+esc(p.id)+'">Usar no tráfego</button></div></div></article>';
+      }).join("") : '<div class="list-empty">A API não retornou publicações. Verifique permissões, tipo de conta e disponibilidade dos campos.</div>';
+      postsGrid.querySelectorAll("[data-use-post]").forEach(b=>b.addEventListener("click",()=>{
+        const post=posts.find(p=>String(p.id)===b.dataset.usePost); if(!post)return;
+        $("campaignPostUrl").value=post.permalink||""; if(!$("campaignName").value.trim()) $("campaignName").value="Tráfego · "+(account?.instagram_username||"Instagram");
+        $("campaignPlatform").value="Instagram"; showView("campaigns"); toast("Publicação selecionada para o plano de tráfego. Revise público, link e orçamento.");
+      }));
+    } catch(err) { postsStatus.textContent = safeError(err); postsGrid.innerHTML = '<div class="list-empty">Não foi possível carregar as publicações.</div>'; }
+  }
+  if ($("refreshInstagramAccounts")) $("refreshInstagramAccounts").addEventListener("click",loadInstagramAccounts);
+  if ($("connectInstagramFromAccounts")) $("connectInstagramFromAccounts").addEventListener("click",()=>showView("settings"));
+  if (accountsStatus) { const callback = new URLSearchParams(window.location.search).get("meta"); if(callback==="connected"||callback==="error"){showView("accounts");if(callback==="connected")loadInstagramAccounts();} }
   renderAll();
 })();
