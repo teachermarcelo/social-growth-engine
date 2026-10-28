@@ -214,7 +214,10 @@ Deno.serve(async (req: Request) => {
     const budget = Number(input.budget_total_brl);
     const startDate = input.start_date;
     const endDate = input.end_date;
-    const age = parseAgeRange(input.age_range);
+    let age: { min: number; max: number };
+    try { age = parseAgeRange(input.age_range); } catch (error) {
+      return json({ error: String((error as Error)?.message || "Faixa etária inválida.") }, 400, corsOrigin);
+    }
     if (!accountId || !/^\d+$/.test(accountId)) return json({ error: "Selecione uma conta de anúncios válida." }, 400, corsOrigin);
     if (!name) return json({ error: "Informe o nome da campanha." }, 400, corsOrigin);
     if (!destination || !/^https:\/\//i.test(destination)) return json({ error: "Informe um link HTTPS válido para o destino." }, 400, corsOrigin);
@@ -261,7 +264,6 @@ Deno.serve(async (req: Request) => {
         objective: "OUTCOME_TRAFFIC",
         status: "PAUSED",
         special_ad_categories: "[]",
-        is_adset_budget_sharing_enabled: "false",
       });
       campaignId = String(campaign.id || "");
       if (!campaignId) throw new Error("Meta não retornou o identificador da campanha.");
