@@ -11,6 +11,7 @@
       <div class="brand"><div class="brand-mark">SG</div><div><strong>Social Growth</strong><small>ENGINE · BETA</small></div></div>
       <nav>
         <button class="nav-link active" data-view="overview">▦ <span>Visão geral</span></button>
+        <button class="nav-link" data-view="accounts">◎ <span>Contas e publicações</span></button>
         <button class="nav-link" data-view="discovery">⌕ <span>Descoberta de público</span></button>
         <button class="nav-link" data-view="campaigns">◎ <span>Campanhas</span></button>
         <button class="nav-link" data-view="planner">▣ <span>Planejamento</span></button>
@@ -34,6 +35,14 @@
         <div class="two-col">
           <article class="panel"><div class="panel-head"><div><h3>Próximas publicações</h3><p>Seu calendário editorial</p></div><button class="text-btn" data-go="planner">Ver calendário</button></div><div id="upcomingList" class="list-empty">Nenhuma publicação planejada. Adicione uma ideia para começar.</div></article>
           <article class="panel"><div class="panel-head"><div><h3>Checklist de crescimento</h3><p>Boas práticas antes de publicar</p></div></div><ul class="checklist"><li><span>01</span><div><b>Gancho claro</b><small>Mostre rapidamente por que vale assistir.</small></div></li><li><span>02</span><div><b>Uma ideia central</b><small>Evite tentar falar de tudo no mesmo conteúdo.</small></div></li><li><span>03</span><div><b>Convite relevante</b><small>Estimule comentários ou compartilhamentos sem enganar.</small></div></li><li><span>04</span><div><b>Revisão de resultados</b><small>Compare conteúdos semelhantes após publicar.</small></div></li></ul></article>
+        </div>
+      </section>
+      <section class="view" id="view-accounts">
+        <div class="section-heading"><div><h2>Contas e publicações</h2><p>Conecte suas contas profissionais e consulte publicações autorizadas pela Meta.</p></div><button class="btn btn-primary" type="button" id="refreshInstagramAccounts">↻ Atualizar contas</button></div>
+        <div class="discovery-intro"><strong>Conexão oficial</strong><p>Entre no painel, configure a URL da função Meta em Configurações e conecte cada conta. A API retorna apenas os dados permitidos pelas permissões concedidas à sua conta.</p></div>
+        <div class="accounts-layout">
+          <article class="panel"><div class="panel-head"><div><h3>Contas conectadas</h3><p>Alterne entre contas autorizadas</p></div><button class="text-btn" type="button" id="connectInstagramFromAccounts">＋ Conectar conta</button></div><div id="instagramAccountsStatus" class="cloud-status" role="status">Entre no painel e configure a conexão oficial para carregar as contas.</div><div id="instagramAccountsList" class="discovery-results"><div class="list-empty">Nenhuma conta carregada.</div></div></article>
+          <article class="panel"><div class="panel-head"><div><h3>Publicações recentes</h3><p>Até 25 publicações retornadas pela API</p></div><span id="instagramSelectedAccount" class="pill">Nenhuma conta selecionada</span></div><div id="instagramPostsStatus" class="fine-print">Selecione uma conta conectada para carregar as publicações.</div><div id="instagramPostsGrid" class="instagram-posts-grid"><div class="list-empty">As publicações aparecerão aqui após a conexão.</div></div></article>
         </div>
       </section>
       <section class="view" id="view-discovery">
@@ -68,9 +77,13 @@
             <label>Objetivo<select id="campaignGoal"><option>Aumentar alcance qualificado</option><option>Gerar visitas ao perfil/canal</option><option>Aumentar visualizações</option><option>Gerar leads ou contatos</option><option>Promover produto ou serviço</option></select></label>
             <div class="form-row"><label>Data inicial<input id="campaignStart" type="date"></label><label>Data final<input id="campaignEnd" type="date"></label></div>
             <div class="form-row"><label>Orçamento total (R$)<input id="campaignBudget" type="number" min="0" step="0.01" value="0"></label><label>Meta numérica<input id="campaignTarget" type="number" min="0" step="1" placeholder="Ex.: 1000"></label></div>
+            <label>Link de destino / compra<input id="campaignDestination" type="url" placeholder="https://seusite.com/checkout ou WhatsApp"></label>
+            <div class="form-row"><label>Região do público<input id="campaignRegion" placeholder="Ex.: Curitiba, Paraná"></label><label>Faixa etária permitida<input id="campaignAge" placeholder="Ex.: 18–44"></label></div>
+            <label>Perfil do público<textarea id="campaignAudience" rows="2" placeholder="Interesses, idioma e contexto do público-alvo. Não inclua dados pessoais sensíveis."></textarea></label>
+            <label>Publicação existente (opcional)<input id="campaignPostUrl" type="url" placeholder="Cole o link de um post ou Reel"></label>
             <label>Observações e hipótese<textarea id="campaignNotes" rows="3" placeholder="O que vamos testar e como saber se funcionou?"></textarea></label>
             <button class="btn btn-primary" type="submit">Salvar campanha</button>
-            <p class="fine-print">Comece com orçamento zero. Só registre gastos reais e resultados observados.</p>
+            <p class="fine-print">Esta tela prepara o plano de tráfego. A ativação real de anúncios exige conta de anúncios Meta, permissões da Marketing API e confirmação explícita. Nenhum valor será gasto por este formulário.</p>
           </form>
           <div class="panel"><div class="panel-head"><div><h3>Campanhas salvas</h3><p>Edite o status e acompanhe a execução.</p></div></div><div id="campaignList" class="discovery-results"><div class="list-empty">Nenhuma campanha criada.</div></div></div>
         </div>
