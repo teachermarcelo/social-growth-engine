@@ -2,9 +2,11 @@
 (() => {
   const $ = id => document.getElementById(id);
   const STORE = "socialGrowthEngine.v1";
-  const SUPABASE_URL = "https://fofhhslxyxkkfbhvyrte.supabase.co";
-  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_kIMlxknOOKooZUKhDbqN-g_-Vk7EpHf";
-  const supabaseClient = window.supabase?.createClient
+  // Do not silently write to an unverified/legacy Supabase project.
+  // Configure the dedicated Social Growth Engine project in Settings.
+  const SUPABASE_URL = (localStorage.getItem("socialGrowthEngine.supabaseUrl") || "").replace(/\/$/, "");
+  const SUPABASE_PUBLISHABLE_KEY = localStorage.getItem("socialGrowthEngine.supabasePublishableKey") || "";
+  const supabaseClient = window.supabase?.createClient && SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY
     ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
     : null;
   let currentUser = null;
@@ -88,8 +90,30 @@
     await syncLocalChanges();
     toast("Dados locais e da nuvem foram mesclados.");
   }
+  const supabaseUrlInput = $("supabaseProjectUrl");
+  const supabaseKeyInput = $("supabasePublishableKey");
+  const saveSupabaseConfigButton = $("saveSupabaseConfig");
+  if (supabaseUrlInput && supabaseKeyInput && saveSupabaseConfigButton) {
+    supabaseUrlInput.value = SUPABASE_URL;
+    supabaseKeyInput.value = SUPABASE_PUBLISHABLE_KEY;
+    saveSupabaseConfigButton.addEventListener("click", () => {
+      try {
+        const projectUrl = new URL(supabaseUrlInput.value.trim());
+        const publishableKey = supabaseKeyInput.value.trim();
+        if (projectUrl.protocol !== "https:" || !publishableKey.startsWith("sb_publishable_") && !publishableKey.startsWith("eyJ")) {
+          throw new Error("Informe a URL HTTPS do projeto dedicado e uma chave publicável (sb_publishable_…). Nunca use service_role.");
+        }
+        localStorage.setItem("socialGrowthEngine.supabaseUrl", projectUrl.toString().replace(/\/$/, ""));
+        localStorage.setItem("socialGrowthEngine.supabasePublishableKey", publishableKey);
+        toast("Configuração salva. Recarregando o painel…");
+        window.location.reload();
+      } catch (err) {
+        setCloudStatus(safeError(err), true);
+      }
+    });
+  }
   if (!supabaseClient) {
-    setCloudStatus("Biblioteca Supabase não carregou. Os dados locais continuam disponíveis.", true);
+    setCloudStatus("Configure a URL e a chave publicável do projeto Supabase exclusivo nas configurações. Seus dados locais continuam disponíveis.", true);
   } else {
     $("cloudAuthForm").addEventListener("submit", async e => {
       e.preventDefault();
