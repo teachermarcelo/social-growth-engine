@@ -50,4 +50,4 @@ O repositório `teachermarcelo/social-growth-engine` já contém um painel está
 
 ## Observação sobre banco existente
 
-A versão anterior do app já continha uma URL Supabase em `app.js`, mas não foi possível confirmar o acesso/estado desse projeto por meio da conexão disponível. Esta branch **não modifica nenhum banco**. Antes de ativar sync na nuvem e OAuth, confirme que `SUPABASE_URL` da interface aponta para o projeto exclusivo do Social Growth Engine e valide as tabelas existentes. Não substitua o projeto sem migrar/confirmar os dados.
+A versão anterior do app já continha uma URL Supabase que não pôde ser confirmada como o projeto dedicado. Esta branch removeu a conexão automática e exige configuração explícita no painel. Esta branch **não modifica nenhum banco**. Antes de ativar sync na nuvem e OAuth, confirme que `SUPABASE_URL` da interface aponta para o projeto exclusivo do Social Growth Engine e valide as tabelas existentes. Não substitua o projeto sem migrar/confirmar os dados.
