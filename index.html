@@ -85,6 +85,17 @@
             <button class="btn btn-primary" type="submit">Salvar campanha</button>
             <p class="fine-print">Esta tela prepara o plano de tráfego. A ativação real de anúncios exige conta de anúncios Meta, permissões da Marketing API e confirmação explícita. Nenhum valor será gasto por este formulário.</p>
           </form>
+          <article class="panel meta-ads-panel">
+            <div class="panel-head"><div><h3>Meta Ads · integração oficial</h3><p>Conecte uma conta de anúncios e crie somente a estrutura pausada para revisão.</p></div><span class="pill pill-warning">Sem ativação automática</span></div>
+            <label>URL da Edge Function Meta Ads<input id="metaAdsFunctionUrl" type="url" inputmode="url" placeholder="https://SEU-PROJETO.supabase.co/functions/v1/meta-ads"></label>
+            <div class="button-row"><button class="btn btn-primary" type="button" id="metaAdsConnect">Conectar conta de anúncios</button><button class="btn btn-secondary" type="button" id="metaAdsRefresh">Atualizar contas</button></div>
+            <div id="metaAdsStatus" class="cloud-status" role="status">Integração de anúncios ainda não conectada.</div>
+            <label>Conta de anúncios autorizada<select id="metaAdsAccount"><option value="">Conecte a Meta para carregar as contas</option></select></label>
+            <div class="notice meta-ads-notice"><b>Escopo da primeira versão:</b> solicita permissões <code>ads_read</code> e <code>ads_management</code>. Cria campanha e conjunto em <b>PAUSED</b>, com orçamento vitalício e agendamento. Ainda não cria criativo/anúncio, não ativa campanhas e não pode gastar dinheiro nesta etapa. A segmentação enviada nesta versão é Brasil + faixa etária; região e interesses digitados acima ficam como notas até implementarmos o mapeamento oficial de localização/interesses.</div>
+            <div class="button-row"><button class="btn btn-primary" type="button" id="metaAdsCreatePaused">Criar estrutura PAUSADA na Meta</button></div>
+            <h4>Histórico de revisão</h4><div id="metaAdsJobs" class="discovery-results"><div class="list-empty">Nenhuma solicitação enviada à Meta.</div></div>
+            <p class="fine-print">Antes de criar, revise nome, link HTTPS, orçamento total (R$ 20–R$ 10.000), datas, faixa etária e conta de anúncios. A criação exige digitar uma frase de confirmação. Para anunciar de verdade, será necessário completar o criativo e o anúncio, revisar tudo e implementar uma etapa separada de ativação explícita.</p>
+          </article>
           <div class="panel"><div class="panel-head"><div><h3>Campanhas salvas</h3><p>Edite o status e acompanhe a execução.</p></div></div><div id="campaignList" class="discovery-results"><div class="list-empty">Nenhuma campanha criada.</div></div></div>
         </div>
         <div class="panel campaign-guide"><h3>Antes de ativar anúncios ou conectar contas</h3><div class="integration-checklist">
