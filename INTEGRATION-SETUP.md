@@ -18,18 +18,19 @@ O repositório `teachermarcelo/social-growth-engine` já contém um painel está
 2. No Meta for Developers, configure um app e Instagram API with Instagram Login. Use uma conta Instagram profissional elegível.
 3. Cadastre como redirect URI a URL exata da Edge Function:
    `https://<PROJECT_REF>.supabase.co/functions/v1/meta-oauth?action=callback`
-4. Defina os secrets no Supabase Edge Functions (não no GitHub):
+4. Gere uma chave de criptografia aleatória de 32 bytes (por exemplo, no terminal com `openssl rand -base64 32`) e guarde-a em um gerenciador de senhas.
+5. Defina os secrets no Supabase Edge Functions (não no GitHub):
    - `META_APP_ID`
    - `META_APP_SECRET`
    - `META_REDIRECT_URI` (URL exata acima)
    - `META_TOKEN_ENCRYPTION_KEY` (Base64 de 32 bytes aleatórios)
    - `APP_BASE_URL` (URL do GitHub Pages, ex. `https://teachermarcelo.github.io/social-growth-engine/`)
    - `SUPABASE_ANON_KEY` se não estiver disponível no runtime da função.
-   - `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` são fornecidos pelo Supabase no runtime hospedado.
-5. Aplique `supabase/migrations/20261028_sge_meta_oauth.sql` **somente** no projeto dedicado.
-6. Publique a função `supabase/functions/meta-oauth/index.ts`.
-7. No painel, entre na conta de sincronização e informe a URL da função `https://<PROJECT_REF>.supabase.co/functions/v1/meta-oauth`, depois clique em **Conectar Instagram**.
-8. Teste com uma conta de função/teste antes de solicitar acesso avançado. Confirme no painel Meta as permissões exigidas e a disponibilidade atual de cada escopo.
+   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e, quando disponível, `SUPABASE_ANON_KEY` são fornecidos pelo runtime Supabase. Nunca copie a service-role para o navegador.
+6. Aplique `supabase/migrations/20261028_sge_meta_oauth.sql` **somente** no projeto dedicado.
+7. Publique `supabase/functions/meta-oauth/index.ts` como função `meta-oauth`. Configure `verify_jwt=false` no gateway para esta função: o callback de OAuth da Meta não envia JWT; a rota `action=start` valida manualmente a sessão e a rota callback exige um state aleatório, expirado em 10 minutos e de uso único.
+8. No painel, entre na conta de sincronização e informe a URL da função `https://<PROJECT_REF>.supabase.co/functions/v1/meta-oauth`, depois clique em **Conectar Instagram**.
+9. Teste com uma conta de função/teste antes de solicitar acesso avançado. Confirme no painel Meta as permissões exigidas e a disponibilidade atual de cada escopo.
 
 ## Segurança
 
