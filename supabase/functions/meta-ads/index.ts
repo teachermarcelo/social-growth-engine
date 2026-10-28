@@ -275,7 +275,7 @@ Deno.serve(async (req: Request) => {
       const adset = await graphPost(`act_${accountId}/adsets`, token, {
         name: name + " — conjunto pausado",
         campaign_id: campaignId,
-        daily_budget: String(Math.round((budget / days) * 100)),
+        lifetime_budget: String(Math.round(budget * 100)),
         start_time: isoDate(String(startDate)),
         end_time: isoDate(String(endDate), true),
         billing_event: "IMPRESSIONS",
@@ -300,7 +300,6 @@ Deno.serve(async (req: Request) => {
         adset_id: adsetId,
         status: "PAUSED",
         budget_total_brl: budget,
-        budget_daily_estimate_brl: Math.round((budget / days) * 100) / 100,
         targeting,
         message: "Campanha e conjunto criados como PAUSED. Nenhum anúncio/criativo foi criado e nada será ativado automaticamente.",
       }, 201, corsOrigin);
