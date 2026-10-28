@@ -141,10 +141,12 @@ Deno.serve(async (req: Request) => {
     const meResponse = await fetch(meUrl);
     if (!meResponse.ok) return appRedirect("error");
     const me = await meResponse.json();
+    const instagramUserId = me.user_id ?? me.id;
+    if (!instagramUserId) return appRedirect("error");
     const encrypted = await encryptToken(token);
     const { error: saveError } = await db.from("sge_meta_connections").upsert({
       user_id: stateRow.user_id,
-      instagram_user_id: String(me.user_id ?? me.id ?? ""),
+      instagram_user_id: String(instagramUserId),
       instagram_username: String(me.username ?? ""),
       access_token_ciphertext: encrypted.ciphertext,
       access_token_iv: encrypted.iv,
@@ -152,7 +154,7 @@ Deno.serve(async (req: Request) => {
       scopes: ["instagram_business_basic", "instagram_business_content_publish", "instagram_business_manage_insights", "instagram_business_manage_comments"],
       connected_at: now,
       updated_at: now,
-    }, { onConflict: "user_id" });
+    }, { onConflict: "user_id,instagram_user_id" });
     if (saveError) return appRedirect("error");
     return appRedirect("connected");
   }
