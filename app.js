@@ -430,5 +430,158 @@
   if ($("refreshInstagramAccounts")) $("refreshInstagramAccounts").addEventListener("click",loadInstagramAccounts);
   if ($("connectInstagramFromAccounts")) $("connectInstagramFromAccounts").addEventListener("click",()=>showView("settings"));
   if (accountsStatus) { const callback = new URLSearchParams(window.location.search).get("meta"); if(callback==="connected"||callback==="error"){showView("accounts");if(callback==="connected")loadInstagramAccounts();} }
+  // Meta Marketing API: connect an ad account, create paused scaffolding only.
+  const META_ADS_URL_KEY = "socialGrowthEngine.metaAdsFunctionUrl.v1";
+  const META_ADS_ACCOUNT_KEY = "socialGrowthEngine.metaAdsAccountId.v1";
+  const metaAdsUrlInput = $("metaAdsFunctionUrl");
+  const metaAdsConnect = $("metaAdsConnect");
+  const metaAdsRefresh = $("metaAdsRefresh");
+  const metaAdsStatus = $("metaAdsStatus");
+  const metaAdsAccount = $("metaAdsAccount");
+  const metaAdsCreatePaused = $("metaAdsCreatePaused");
+  const metaAdsJobs = $("metaAdsJobs");
+
+  function metaAdsEndpoint(action) {
+    const raw = (metaAdsUrlInput?.value || localStorage.getItem(META_ADS_URL_KEY) || "").trim();
+    const endpoint = new URL(raw);
+    if (endpoint.protocol !== "https:" || !endpoint.pathname.endsWith("/functions/v1/meta-ads")) {
+      throw new Error("Informe a URL HTTPS completa da função /functions/v1/meta-ads.");
+    }
+    endpoint.searchParams.set("action", action);
+    return endpoint;
+  }
+  async function metaAdsRequest(action, method = "GET", body = null) {
+    if (!supabaseClient) throw new Error("Configure o Supabase em Configurações.");
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    if (!session?.access_token) throw new Error("Entre na sua conta do Social Growth Engine em Configurações.");
+    const endpoint = metaAdsEndpoint(action);
+    const options = { method, headers: { Authorization: "Bearer " + session.access_token } };
+    if (body !== null) {
+      options.headers["Content-Type"] = "application/json";
+      options.body = JSON.stringify(body);
+    }
+    const response = await fetch(endpoint.toString(), options);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Falha na integração Meta Ads.");
+    return payload;
+  }
+  function setMetaAdsStatus(message, isError = false) {
+    if (!metaAdsStatus) return;
+    metaAdsStatus.textContent = message;
+    metaAdsStatus.classList.toggle("error", isError);
+  }
+  function renderMetaAdsJobs(jobs) {
+    if (!metaAdsJobs) return;
+    if (!jobs?.length) {
+      metaAdsJobs.innerHTML = '<div class="list-empty">Nenhuma estrutura de campanha registrada pela API.</div>';
+      return;
+    }
+    metaAdsJobs.innerHTML = jobs.map(job => {
+      const status = job.review_status === "created_paused" ? "Criada pausada" :
+        job.review_status === "failed" ? "Falha parcial/total" :
+        job.review_status === "active" ? "Ativa" : job.review_status;
+      return '<article class="campaign-card"><div class="campaign-card-head"><div><b>' + esc(job.campaign_name) + '</b><p>Conta act_' + esc(job.ad_account_id) + ' · ' + esc(job.objective) + '</p></div><span class="status-tag">' + esc(status) + '</span></div>' +
+        '<div class="campaign-facts"><span>Orçamento vitalício: <b>R$ ' + Number(job.budget_amount || 0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b></span><span>Datas: <b>' + esc(job.start_date) + ' → ' + esc(job.end_date) + '</b></span></div>' +
+        '<p class="campaign-notes">ID campanha: ' + esc(job.campaign_id || "não confirmado") + '<br>ID conjunto: ' + esc(job.adset_id || "não confirmado") + '<br>Estado seguro: nenhum anúncio/criativo criado por este fluxo.</p></article>';
+    }).join("");
+  }
+  async function loadMetaAdsAccounts() {
+    if (!metaAdsAccount) return;
+    setMetaAdsStatus("Consultando as contas de anúncios autorizadas…");
+    try {
+      localStorage.setItem(META_ADS_URL_KEY, metaAdsUrlInput.value.trim());
+      const payload = await metaAdsRequest("accounts");
+      const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
+      const saved = localStorage.getItem(META_ADS_ACCOUNT_KEY) || "";
+      metaAdsAccount.innerHTML = '<option value="">Selecione uma conta de anúncios</option>' + accounts.map(a => {
+        const label = (a.ad_account_name || "Conta Meta") + " · act_" + a.ad_account_id + " · " + (a.currency || "?") + (Number(a.account_status) === 1 ? " · ativa" : " · status " + a.account_status);
+        return '<option value="' + esc(a.ad_account_id) + '" data-currency="' + esc(a.currency || "") + '" data-status="' + esc(a.account_status) + '">' + esc(label) + '</option>';
+      }).join("");
+      if (accounts.some(a => a.ad_account_id === saved)) metaAdsAccount.value = saved;
+      setMetaAdsStatus(accounts.length ? accounts.length + " conta(s) de anúncios encontradas. Selecione a conta correta." : "Nenhuma conta de anúncios acessível. Confira se o perfil tem acesso no Gerenciador de Anúncios e se a Meta concedeu as permissões.");
+      if (!accounts.length) metaAdsAccount.innerHTML = '<option value="">Nenhuma conta de anúncios acessível</option>';
+      const jobs = await metaAdsRequest("jobs");
+      renderMetaAdsJobs(jobs.jobs || []);
+    } catch (err) {
+      setMetaAdsStatus(safeError(err), true);
+    }
+  }
+  if (metaAdsUrlInput && metaAdsConnect && metaAdsRefresh && metaAdsStatus && metaAdsAccount && metaAdsCreatePaused) {
+    metaAdsUrlInput.value = localStorage.getItem(META_ADS_URL_KEY) || "https://rvgcniaowzmsudzliozf.supabase.co/functions/v1/meta-ads";
+    metaAdsAccount.addEventListener("change", () => localStorage.setItem(META_ADS_ACCOUNT_KEY, metaAdsAccount.value));
+    metaAdsUrlInput.addEventListener("change", () => localStorage.setItem(META_ADS_URL_KEY, metaAdsUrlInput.value.trim()));
+    metaAdsConnect.addEventListener("click", async () => {
+      try {
+        localStorage.setItem(META_ADS_URL_KEY, metaAdsUrlInput.value.trim());
+        setMetaAdsStatus("Iniciando autorização oficial da Meta…");
+        metaAdsConnect.disabled = true;
+        const payload = await metaAdsRequest("start", "POST", {});
+        if (!payload.authorization_url) throw new Error("A Meta não retornou o endereço de autorização.");
+        window.location.assign(payload.authorization_url);
+      } catch (err) {
+        setMetaAdsStatus(safeError(err), true);
+        metaAdsConnect.disabled = false;
+      }
+    });
+    metaAdsRefresh.addEventListener("click", loadMetaAdsAccounts);
+    metaAdsCreatePaused.addEventListener("click", async () => {
+      try {
+        if (!metaAdsAccount.value) throw new Error("Conecte e selecione uma conta de anúncios.");
+        const name = $("campaignName").value.trim();
+        const destination = $("campaignDestination").value.trim();
+        const budget = Number($("campaignBudget").value || 0);
+        const startDate = $("campaignStart").value;
+        const endDate = $("campaignEnd").value;
+        const ageRange = $("campaignAge").value.trim();
+        if (!name) throw new Error("Preencha o nome da campanha no formulário à esquerda.");
+        if (!/^https:\/\//i.test(destination)) throw new Error("Informe um link HTTPS no campo de destino.");
+        if (!Number.isFinite(budget) || budget < 20 || budget > 10000) throw new Error("Nesta primeira versão, o orçamento total deve ficar entre R$ 20 e R$ 10.000.");
+        if (!startDate || !endDate) throw new Error("Defina data inicial e final futuras no formulário.");
+        if (endDate < startDate) throw new Error("A data final não pode ser anterior à inicial.");
+        const typed = prompt('ATENÇÃO: será criada uma campanha e um conjunto de anúncios PAUSADOS. Nenhum anúncio será criado nem ativado. Orçamento total: R$ ' + budget.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}) + '.\n\nPara confirmar a criação pausada, digite exatamente: CRIAR CAMPANHA PAUSADA');
+        if (typed !== "CRIAR CAMPANHA PAUSADA") { setMetaAdsStatus("Criação cancelada. Nenhuma solicitação foi enviada à Meta."); return; }
+        metaAdsCreatePaused.disabled = true;
+        setMetaAdsStatus("Enviando solicitação confirmada à API oficial da Meta…");
+        const payload = await metaAdsRequest("create-paused", "POST", {
+          confirm: typed,
+          ad_account_id: metaAdsAccount.value,
+          name,
+          objective: "OUTCOME_TRAFFIC",
+          destination_url: destination,
+          budget_total_brl: budget,
+          start_date: startDate,
+          end_date: endDate,
+          age_range: ageRange,
+          region: $("campaignRegion").value.trim(),
+          audience: $("campaignAudience").value.trim(),
+          notes: $("campaignNotes").value.trim()
+        });
+        setMetaAdsStatus("Estrutura criada em PAUSED. ID da campanha: " + payload.campaign_id + ". Nenhum anúncio foi criado ou ativado.");
+        toast("Estrutura de campanha criada pausada na Meta.");
+        await loadMetaAdsAccounts();
+      } catch (err) {
+        setMetaAdsStatus(safeError(err), true);
+      } finally {
+        metaAdsCreatePaused.disabled = false;
+      }
+    });
+    const callback = new URLSearchParams(window.location.search).get("meta_ads");
+    if (callback) {
+      showView("campaigns");
+      if (callback === "connected") {
+        setMetaAdsStatus("Conta(s) de anúncios conectada(s) à plataforma. Clique em Atualizar contas para conferir.");
+        loadMetaAdsAccounts();
+      } else if (callback === "no_accounts") {
+        setMetaAdsStatus("A autorização foi concluída, mas a Meta não retornou contas de anúncios acessíveis.", true);
+      } else {
+        setMetaAdsStatus("Não foi possível concluir a autorização. Confira o redirect URI, os secrets e as permissões ads_read / ads_management.", true);
+      }
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("meta_ads");
+      window.history.replaceState({}, "", cleanUrl.toString());
+    }
+  }
+
   renderAll();
 })();
