@@ -293,7 +293,7 @@
   const metaConnectButton = $("metaConnect");
   const metaStatus = $("metaStatus");
   if (metaFunctionInput && metaConnectButton && metaStatus) {
-    metaFunctionInput.value = localStorage.getItem(META_ENDPOINT_STORE) || "";
+    metaFunctionInput.value = localStorage.getItem(META_ENDPOINT_STORE) || "https://rvgcniaowzmsudzliozf.supabase.co/functions/v1/meta-oauth";
     const callbackStatus = new URLSearchParams(window.location.search).get("meta");
     if (callbackStatus === "connected") {
       metaStatus.textContent = "Instagram conectado com sucesso. O token foi salvo criptografado no backend.";
