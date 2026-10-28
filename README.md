@@ -56,7 +56,7 @@ A taxa agregada de engajamento por visualização é calculada como:
 
 ## Supabase: configuração aplicada
 
-O app usa o cliente JavaScript oficial via CDN, o Project URL e uma chave publicável (não secreta). O app usa tabelas com prefixo `sge_`; antes de ativar sincronização, confirme que a URL em `app.js` aponta para o projeto Supabase dedicado correto. O acesso às tabelas de conteúdo deve ser protegido por RLS para que cada usuário autenticado veja apenas os próprios registros. A migração `supabase/migrations/20261028_sge_meta_oauth.sql` adiciona tabelas privadas para OAuth e não deve ser aplicada a nenhum outro projeto.
+O app usa o cliente JavaScript oficial via CDN, o Project URL e uma chave publicável (não secreta). O app exige que a URL do projeto Supabase dedicado e a chave publicável sejam informadas em **Configurações → Sincronização na nuvem**. Nenhum projeto antigo é selecionado automaticamente. O acesso às tabelas de conteúdo deve ser protegido por RLS para que cada usuário autenticado veja apenas os próprios registros. A migração `supabase/migrations/20261028_sge_meta_oauth.sql` adiciona tabelas privadas para OAuth e não deve ser aplicada a nenhum outro projeto.
 
 1. Abra **Configurações → Sincronização na nuvem**.
 2. Crie uma conta com e-mail e senha; se a confirmação por e-mail estiver ativa, confirme o endereço antes de entrar.
