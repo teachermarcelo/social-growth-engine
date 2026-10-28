@@ -268,5 +268,77 @@
   $("importBackup").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.posts)||!Array.isArray(data.metrics))throw Error("Formato inválido");if(!confirm("Importar este backup substituirá os dados atuais deste navegador. Deseja continuar?"))return;state={posts:data.posts,metrics:data.metrics,segments:Array.isArray(data.segments)?data.segments:[],opportunities:Array.isArray(data.opportunities)?data.opportunities:[],campaigns:Array.isArray(data.campaigns)?data.campaigns:[]};save();toast("Backup importado.");}catch(err){toast("Arquivo inválido. Nenhum dado foi importado.");}finally{e.target.value="";}});
   $("clearData").onclick=()=>{if(confirm("Isso apagará os conteúdos e métricas salvos neste navegador. Exporte um backup antes. Continuar?")){state={posts:[],metrics:[],segments:[],opportunities:[],campaigns:[]};save();toast("Dados locais apagados.");}};
   $("exportCsv").onclick=()=>{if(!state.metrics.length){toast("Não há métricas para exportar.");return;}const cols=["title","platform","date","views","reach","likes","comments","shares","followers","retention"];const quote=v=>'"'+String(v??"").replace(/"/g,'""')+'"';const csv=[cols.join(";"),...state.metrics.map(m=>cols.map(k=>quote(m[k])).join(";"))].join("\r\n");download("social-growth-metricas.csv","\ufeff"+csv,"text/csv;charset=utf-8");};
+  const META_ENDPOINT_STORE = "socialGrowthEngine.metaFunctionUrl.v1";
+  const metaFunctionInput = $("metaFunctionUrl");
+  const metaConnectButton = $("metaConnect");
+  const metaStatus = $("metaStatus");
+  if (metaFunctionInput && metaConnectButton && metaStatus) {
+    metaFunctionInput.value = localStorage.getItem(META_ENDPOINT_STORE) || "";
+    const callbackStatus = new URLSearchParams(window.location.search).get("meta");
+    if (callbackStatus === "connected") {
+      metaStatus.textContent = "Instagram conectado com sucesso. O token foi salvo criptografado no backend.";
+      metaStatus.classList.remove("error");
+      toast("Instagram conectado.");
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("meta");
+      window.history.replaceState({}, "", cleanUrl.toString());
+    } else if (callbackStatus === "error") {
+      metaStatus.textContent = "Não foi possível concluir a conexão. Confira as permissões, redirect URI e secrets da função.";
+      metaStatus.classList.add("error");
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("meta");
+      window.history.replaceState({}, "", cleanUrl.toString());
+    }
+    metaFunctionInput.addEventListener("change", () => {
+      localStorage.setItem(META_ENDPOINT_STORE, metaFunctionInput.value.trim());
+    });
+    metaConnectButton.addEventListener("click", async () => {
+      if (!supabaseClient) {
+        metaStatus.textContent = "O cliente Supabase não carregou. Verifique a configuração da nuvem.";
+        metaStatus.classList.add("error");
+        return;
+      }
+      let endpoint;
+      try {
+        endpoint = new URL(metaFunctionInput.value.trim());
+        if (endpoint.protocol !== "https:" || !endpoint.pathname.endsWith("/functions/v1/meta-oauth")) {
+          throw new Error("Informe a URL HTTPS completa da função /functions/v1/meta-oauth.");
+        }
+      } catch (err) {
+        metaStatus.textContent = safeError(err);
+        metaStatus.classList.add("error");
+        return;
+      }
+      localStorage.setItem(META_ENDPOINT_STORE, endpoint.toString().replace(/\/$/, ""));
+      metaConnectButton.disabled = true;
+      metaStatus.classList.remove("error");
+      metaStatus.textContent = "Preparando conexão segura com a Meta…";
+      try {
+        const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!session?.access_token) throw new Error("Entre na conta do Social Growth Engine antes de conectar o Instagram.");
+        endpoint.searchParams.set("action", "start");
+        const response = await fetch(endpoint.toString(), {
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + session.access_token,
+            "Content-Type": "application/json"
+          },
+          body: "{}"
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.authorization_url) {
+          throw new Error(payload.error || "A função de conexão não respondeu corretamente. Verifique a implantação e os secrets.");
+        }
+        metaStatus.textContent = "Redirecionando para a autorização oficial do Instagram…";
+        window.location.assign(payload.authorization_url);
+      } catch (err) {
+        metaStatus.textContent = safeError(err);
+        metaStatus.classList.add("error");
+      } finally {
+        metaConnectButton.disabled = false;
+      }
+    });
+  }
   renderAll();
 })();
