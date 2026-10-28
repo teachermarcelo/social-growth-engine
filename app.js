@@ -4,8 +4,8 @@
   const STORE = "socialGrowthEngine.v1";
   // Do not silently write to an unverified/legacy Supabase project.
   // Configure the dedicated Social Growth Engine project in Settings.
-  const SUPABASE_URL = (localStorage.getItem("socialGrowthEngine.supabaseUrl") || "").replace(/\/$/, "");
-  const SUPABASE_PUBLISHABLE_KEY = localStorage.getItem("socialGrowthEngine.supabasePublishableKey") || "";
+  const SUPABASE_URL = (localStorage.getItem("socialGrowthEngine.supabaseUrl") || "https://rvgcniaowzmsudzliozf.supabase.co").replace(/\/$/, "");
+  const SUPABASE_PUBLISHABLE_KEY = localStorage.getItem("socialGrowthEngine.supabasePublishableKey") || "sb_publishable_N_xCS0lbbTvG7qWTpAw0ag_vlg1lbHb";
   const supabaseClient = window.supabase?.createClient && SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY
     ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
     : null;
