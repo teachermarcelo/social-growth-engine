@@ -7,14 +7,14 @@ O repositório `teachermarcelo/social-growth-engine` já contém um painel está
 ## Arquitetura
 
 - **Interface:** GitHub Pages (HTML/CSS/JS). Não guardar segredos no browser.
-- **Banco:** projeto Supabase exclusivo do Social Growth Engine. A migração abaixo cria apenas tabelas `sge_*` privadas para estado OAuth e conexão Meta.
+- **Banco:** projeto existente `ingles-para-nacoes` (`rvgcniaowzmsudzliozf`). A migração cria apenas tabelas novas com prefixo `sge_`, sem alterar tabelas de outros sistemas.
 - **Backend:** Supabase Edge Function `meta-oauth`; troca o código OAuth e armazena o token criptografado com AES-GCM.
 - **Instagram:** Instagram API with Instagram Login para contas profissionais elegíveis. A Meta precisa aprovar as permissões e o app antes de uso em produção.
 - **YouTube:** integração não incluída nesta etapa. Próxima etapa: Google Cloud OAuth + YouTube Data API/YouTube Analytics API.
 
 ## Pré-requisitos
 
-1. Confirme/crie um projeto Supabase exclusivo para este app. **Não aplique a migração em Fluent Immersion, Inglês para Nações ou qualquer outro projeto.**
+1. Use o projeto Supabase `ingles-para-nacoes` configurado para esta implantação. A migração já foi aplicada nele. Ela cria tabelas novas `sge_*`; não apague nem substitua tabelas existentes.
 2. No Meta for Developers, configure um app e Instagram API with Instagram Login. Use uma conta Instagram profissional elegível.
 3. Cadastre como redirect URI a URL exata da Edge Function:
    `https://<PROJECT_REF>.supabase.co/functions/v1/meta-oauth?action=callback`
@@ -27,7 +27,7 @@ O repositório `teachermarcelo/social-growth-engine` já contém um painel está
    - `APP_BASE_URL` (URL do GitHub Pages, ex. `https://teachermarcelo.github.io/social-growth-engine/`)
    - `SUPABASE_ANON_KEY` se não estiver disponível no runtime da função.
    - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e, quando disponível, `SUPABASE_ANON_KEY` são fornecidos pelo runtime Supabase. Nunca copie a service-role para o navegador.
-6. Aplique `supabase/migrations/20261028_sge_meta_oauth.sql` **somente** no projeto dedicado.
+6. A migração `supabase/migrations/20261028_sge_meta_oauth.sql` foi aplicada no projeto `ingles-para-nacoes`. Se for reaplicada em outro ambiente, confira o `project_id` antes.
 7. Publique `supabase/functions/meta-oauth/index.ts` como função `meta-oauth`. Configure `verify_jwt=false` no gateway para esta função: o callback de OAuth da Meta não envia JWT; a rota `action=start` valida manualmente a sessão e a rota callback exige um state aleatório, expirado em 10 minutos e de uso único.
 8. No painel, entre na conta de sincronização e informe a URL da função `https://<PROJECT_REF>.supabase.co/functions/v1/meta-oauth`, depois clique em **Conectar Instagram**.
 9. Teste com uma conta de função/teste antes de solicitar acesso avançado. Confirme no painel Meta as permissões exigidas e a disponibilidade atual de cada escopo.
@@ -50,4 +50,4 @@ O repositório `teachermarcelo/social-growth-engine` já contém um painel está
 
 ## Observação sobre banco existente
 
-A versão anterior do app já continha uma URL Supabase que não pôde ser confirmada como o projeto dedicado. Esta branch removeu a conexão automática e exige configuração explícita no painel. Esta branch **não modifica nenhum banco**. Antes de ativar sync na nuvem e OAuth, confirme que `SUPABASE_URL` da interface aponta para o projeto exclusivo do Social Growth Engine e valide as tabelas existentes. Não substitua o projeto sem migrar/confirmar os dados.
+A interface exige configuração explícita do projeto Supabase. Para esta implantação, use o projeto `ingles-para-nacoes` (`rvgcniaowzmsudzliozf`). As tabelas `sge_*` foram criadas com RLS e sem políticas de cliente; apenas a função backend com service role pode acessá-las nesta fase. Isso protege os tokens, mas o dashboard ainda precisa de uma camada de backend/API para ler e gravar campanhas e métricas.
