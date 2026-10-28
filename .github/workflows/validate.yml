@@ -23,6 +23,8 @@ jobs:
       - name: Validate integration files exist
         run: |
           test -f supabase/functions/meta-oauth/index.ts
+          test -f supabase/functions/meta-ads/index.ts
           test -f supabase/migrations/20261028_sge_meta_oauth.sql
+          test -f supabase/migrations/20261028_sge_meta_ads.sql
           test -f INTEGRATION-SETUP.md
           test -f growth-tools.js
