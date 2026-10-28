@@ -17,9 +17,12 @@ jobs:
         with:
           node-version: 22
       - name: Check browser JavaScript syntax
-        run: node --check app.js
+        run: |
+          node --check app.js
+          node --check growth-tools.js
       - name: Validate integration files exist
         run: |
           test -f supabase/functions/meta-oauth/index.ts
           test -f supabase/migrations/20261028_sge_meta_oauth.sql
           test -f INTEGRATION-SETUP.md
+          test -f growth-tools.js
