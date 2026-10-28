@@ -46,6 +46,27 @@ async function encryptToken(token: string) {
   return { ciphertext: base64(new Uint8Array(encrypted)), iv: base64(iv) };
 }
 
+async function decryptToken(ciphertext: string, ivText: string) {
+  const keyBytes = Uint8Array.from(atob(required("META_TOKEN_ENCRYPTION_KEY")), c => c.charCodeAt(0));
+  if (keyBytes.length !== 32) throw new Error("META_TOKEN_ENCRYPTION_KEY must be base64 for exactly 32 random bytes");
+  const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["decrypt"]);
+  const iv = Uint8Array.from(atob(ivText), c => c.charCodeAt(0));
+  const bytes = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0));
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, bytes);
+  return new TextDecoder().decode(plain);
+}
+async function authenticatedUser(req: Request) {
+  const bearer = req.headers.get("authorization") ?? "";
+  const token = bearer.startsWith("Bearer ") ? bearer.slice(7) : "";
+  if (!token) return null;
+  const client = createClient(required("SUPABASE_URL"), required("SUPABASE_ANON_KEY"), {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data: { user }, error } = await client.auth.getUser(token);
+  return error || !user ? null : user;
+}
+
 Deno.serve(async (req: Request) => {
   const appBase = Deno.env.get("APP_BASE_URL") ?? "";
   const origin = req.headers.get("origin") ?? "";
@@ -59,6 +80,47 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
   const action = url.searchParams.get("action");
   const db = adminClient();
+
+  // Read-only account and media endpoints. Every request is tied to the authenticated SGE user.
+  if ((action === "accounts" || action === "posts") && req.method === "GET") {
+    if (origin && origin !== allowedOrigin) return json({ error: "Origin not allowed" }, 403, corsOrigin);
+    const user = await authenticatedUser(req);
+    if (!user) return json({ error: "Entre no Social Growth Engine antes de consultar as contas." }, 401, corsOrigin);
+
+    if (action === "accounts") {
+      const { data, error } = await db.from("sge_meta_connections")
+        .select("instagram_user_id,instagram_username,connected_at,token_expires_at,scopes")
+        .eq("user_id", user.id)
+        .order("connected_at", { ascending: false });
+      if (error) return json({ error: "Não foi possível carregar as contas conectadas." }, 500, corsOrigin);
+      return json({ accounts: data ?? [] }, 200, corsOrigin);
+    }
+
+    const accountId = url.searchParams.get("account_id") ?? "";
+    if (!accountId) return json({ error: "Informe account_id." }, 400, corsOrigin);
+    const { data: connection, error: connectionError } = await db.from("sge_meta_connections")
+      .select("instagram_user_id,instagram_username,access_token_ciphertext,access_token_iv,token_expires_at")
+      .eq("user_id", user.id)
+      .eq("instagram_user_id", accountId)
+      .maybeSingle();
+    if (connectionError || !connection) return json({ error: "Conta não encontrada para este usuário." }, 404, corsOrigin);
+    if (connection.token_expires_at && new Date(connection.token_expires_at).getTime() < Date.now()) {
+      return json({ error: "O token expirou. Reconecte a conta do Instagram." }, 401, corsOrigin);
+    }
+    try {
+      const token = await decryptToken(connection.access_token_ciphertext, connection.access_token_iv);
+      const mediaUrl = new URL(`https://graph.instagram.com/${encodeURIComponent(connection.instagram_user_id)}/media`);
+      mediaUrl.searchParams.set("fields", "id,caption,media_type,media_url,permalink,thumbnail_url,timestamp,like_count,comments_count");
+      mediaUrl.searchParams.set("limit", "25");
+      mediaUrl.searchParams.set("access_token", token);
+      const mediaResponse = await fetch(mediaUrl);
+      const mediaPayload = await mediaResponse.json();
+      if (!mediaResponse.ok) return json({ error: mediaPayload?.error?.message || "A API do Instagram não conseguiu retornar as publicações." }, 502, corsOrigin);
+      return json({ account: { instagram_user_id: connection.instagram_user_id, instagram_username: connection.instagram_username }, posts: mediaPayload.data ?? [], paging: mediaPayload.paging ?? null }, 200, corsOrigin);
+    } catch {
+      return json({ error: "Falha segura ao consultar publicações. Verifique os secrets e as permissões da Meta." }, 500, corsOrigin);
+    }
+  }
 
   if (action === "start" && req.method === "POST") {
     if (origin && origin !== allowedOrigin) return json({ error: "Origin not allowed" }, 403, corsOrigin);
