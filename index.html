@@ -115,7 +115,34 @@
         <div class="panel generated"><div class="panel-head"><div><h3>Laboratório de ideias</h3><p>Modelos editáveis, não promessas de viralização.</p></div><span class="spark">✦</span></div><div id="ideaOutput" class="idea-output"><div class="placeholder-icon">✦</div><h3>Seu próximo gancho começa aqui</h3><p>Preencha o tema ao lado e gere sugestões para iniciar seu rascunho.</p></div><button id="generateIdeas" class="btn btn-secondary btn-block" type="button">Gerar ideias de gancho</button><div id="ideaSuggestions" class="suggestions"></div></div></div>
       </section>
       <section class="view" id="view-analytics">
-        <div class="section-heading"><div><h2>Análise de desempenho</h2><p>Insira métricas das publicações para encontrar padrões úteis.</p></div><button class="btn btn-primary" id="addMetricBtn">＋ Registrar métricas</button></div>
+        <div class="section-heading"><div><h2>Análise de desempenho</h2><p>Acompanhe cliques reais nos links e visitas à página do produto.</p></div><button class="btn btn-primary" id="addMetricBtn">＋ Registrar métricas</button></div>
+        <article class="panel tracking-panel">
+          <div class="panel-head"><div><span class="eyebrow">TRÁFEGO · SEM CUSTO DE API</span><h3>Rastreamento do produto</h3><p>Links rastreáveis para Instagram, WhatsApp, YouTube e outras divulgações.</p></div><div class="button-row"><button class="btn btn-secondary" id="trackingRefresh" type="button">Atualizar</button><button class="btn btn-primary" id="trackingEnable" type="button">Ativar rastreamento</button></div></div>
+          <div id="trackingStatus" class="cloud-status" role="status">Entre na sua conta para configurar o rastreamento seguro.</div>
+          <div class="metrics tracking-metrics">
+            <article class="metric-card"><div class="metric-label">Visitas à página</div><div class="metric-value" id="trackPageViews">0</div><div class="metric-foot">Últimos 30 dias · pixel instalado</div></article>
+            <article class="metric-card"><div class="metric-label">Visualizações do produto</div><div class="metric-value" id="trackProductViews">0</div><div class="metric-foot">Últimos 30 dias</div></article>
+            <article class="metric-card"><div class="metric-label">Cliques em chamadas</div><div class="metric-value" id="trackCtaClicks">0</div><div class="metric-foot">Botões marcados no site</div></article>
+            <article class="metric-card"><div class="metric-label">Cliques nos links</div><div class="metric-value" id="trackOutboundClicks">0</div><div class="metric-foot">Links rastreáveis publicados</div></article>
+          </div>
+          <div class="tracking-layout">
+            <form class="tracking-link-form" id="trackingLinkForm">
+              <h4>Criar link rastreável</h4>
+              <label>Nome do link<input id="trackingLabel" required maxlength="120" placeholder="Ex.: Kit completo — bio Instagram"></label>
+              <label>Destino HTTPS<input id="trackingDestination" type="url" required placeholder="https://seusite.com/complete-lesson-kit"></label>
+              <div class="form-row"><label>Origem<select id="trackingSource"><option value="instagram">Instagram</option><option value="youtube">YouTube</option><option value="whatsapp">WhatsApp</option><option value="facebook">Facebook</option><option value="email">E-mail</option><option value="other">Outro</option></select></label><label>Tipo<select id="trackingMedium"><option value="organic">Orgânico</option><option value="social">Social</option><option value="bio">Link da bio</option><option value="story">Story/Reels</option><option value="message">Mensagem</option><option value="partner">Parceria</option></select></label></div>
+              <label>Nome da campanha<input id="trackingCampaign" maxlength="120" value="fluent-immersion-kits" placeholder="fluent-immersion-kits"></label>
+              <button class="btn btn-primary btn-block" type="submit">＋ Gerar link rastreável</button>
+              <p class="fine-print">Cada clique passa pelo endpoint seguro, é contado e então redirecionado ao destino HTTPS.</p>
+            </form>
+            <div class="tracking-links-column">
+              <div class="panel-head"><div><h4>Seus links</h4><p>Cliques registrados nos últimos 30 dias.</p></div></div>
+              <div id="trackingLinksList" class="list-empty">Entre na sua conta e ative o rastreamento.</div>
+              <div class="pixel-box"><h4>Pixel gratuito para sua página de vendas</h4><p>Copie o código e cole antes de <code>&lt;/body&gt;</code> na página do produto. Ele registra visitas e cliques marcados sem coletar nomes, e-mails ou IPs.</p><textarea id="trackingPixelCode" rows="5" readonly placeholder="Ative o rastreamento para gerar o código."></textarea><button class="btn btn-secondary btn-block" id="trackingCopyPixel" type="button">Copiar código do pixel</button></div>
+            </div>
+          </div>
+          <p class="fine-print">O painel mede eventos registrados no seu site e nos links rastreáveis. Ele não revela a identidade de quem clicou nem informa impressões dentro do Instagram; essas métricas dependem da API oficial da rede.</p>
+        </article>
         <div class="metrics analytics-metrics"><article class="metric-card"><div class="metric-label">Engajamento por visualização</div><div class="metric-value" id="engagementRate">—</div><div class="metric-foot">Curtidas + comentários + compartilhamentos ÷ views</div></article><article class="metric-card"><div class="metric-label">Média de visualizações</div><div class="metric-value" id="avgViews">—</div><div class="metric-foot">Por registro de desempenho</div></article><article class="metric-card"><div class="metric-label">Registros analisados</div><div class="metric-value" id="metricCount">0</div><div class="metric-foot">Dados inseridos manualmente</div></article></div>
         <div class="two-col"><article class="panel"><div class="panel-head"><div><h3>Registros de desempenho</h3><p>Os dados pertencem a este navegador até exportar ou conectar um backend.</p></div><button class="text-btn" id="exportCsv">Exportar CSV</button></div><div id="metricsList" class="list-empty">Ainda não há métricas cadastradas.</div></article><article class="panel"><h3>Como interpretar</h3><div class="insight-card"><span>↗</span><div><b>Compare formatos equivalentes</b><p>Reels com Reels, Shorts com Shorts e vídeos de duração semelhante.</p></div></div><div class="insight-card"><span>◷</span><div><b>Observe a retenção</b><p>Use a retenção média e os pontos de abandono quando a plataforma fornecer esses dados.</p></div></div><div class="insight-card"><span>♡</span><div><b>Meça ações significativas</b><p>Compartilhamentos, salvamentos e novos seguidores ajudam a entender o valor do conteúdo.</p></div></div><div class="notice">Não há acesso automático às contas nesta versão. Os dados precisam ser inseridos manualmente; nenhuma conexão com Instagram ou YouTube foi configurada.</div></article></div>
       </section>
