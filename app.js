@@ -2,9 +2,11 @@
 (() => {
   const $ = id => document.getElementById(id);
   const STORE = "socialGrowthEngine.v1";
-  const SUPABASE_URL = "https://fofhhslxyxkkfbhvyrte.supabase.co";
-  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_kIMlxknOOKooZUKhDbqN-g_-Vk7EpHf";
-  const supabaseClient = window.supabase?.createClient
+  // Do not silently write to an unverified/legacy Supabase project.
+  // Configure the dedicated Social Growth Engine project in Settings.
+  const SUPABASE_URL = (localStorage.getItem("socialGrowthEngine.supabaseUrl") || "https://rvgcniaowzmsudzliozf.supabase.co").replace(/\/$/, "");
+  const SUPABASE_PUBLISHABLE_KEY = localStorage.getItem("socialGrowthEngine.supabasePublishableKey") || "sb_publishable_N_xCS0lbbTvG7qWTpAw0ag_vlg1lbHb";
+  const supabaseClient = window.supabase?.createClient && SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY
     ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
     : null;
   let currentUser = null;
@@ -33,6 +35,7 @@
     if (currentUser) {
       setCloudStatus("Conectado: " + (currentUser.email || "conta autenticada"));
       $("cloudSignIn").textContent = "Conectado";
+      if (typeof loadTrackingWorkspace === "function") loadTrackingWorkspace();
     } else {
       setCloudStatus(supabaseClient ? "Não conectado. Seus dados continuam neste navegador." : "Biblioteca Supabase não carregou. Verifique sua conexão.");
       $("cloudSignIn").textContent = "Entrar e sincronizar";
@@ -45,10 +48,10 @@
     cloudBusy = true;
     setCloudStatus("Salvando alterações na nuvem…");
     try {
-      for (const [table, items] of [["sge_posts", state.posts], ["sge_metrics", state.metrics], ["sge_segments", state.segments], ["sge_opportunities", state.opportunities], ["sge_campaigns", state.campaigns]]) {
-        if (!items.length) continue;
-        const rows = items.map(item => ({id:item.id, user_id:currentUser.id, payload:item, updated_at:new Date().toISOString()}));
-        const {error} = await supabaseClient.from(table).upsert(rows, {onConflict:"user_id,id"});
+      const records = [["posts", state.posts], ["metrics", state.metrics], ["segments", state.segments], ["opportunities", state.opportunities], ["campaigns", state.campaigns]]
+        .flatMap(([record_type, items]) => items.map(item => ({user_id:currentUser.id, record_type, record_id:String(item.id), payload:item, updated_at:new Date().toISOString()})));
+      if (records.length) {
+        const {error} = await supabaseClient.from("sge_app_records").upsert(records, {onConflict:"user_id,record_type,record_id"});
         if (error) throw error;
       }
       setCloudStatus("Sincronizado com a nuvem · " + new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}));
@@ -59,37 +62,55 @@
   }
   async function deleteCloudRecord(table, id) {
     if (!supabaseClient || !currentUser) return;
-    const {error} = await supabaseClient.from(table).delete().eq("id", id).eq("user_id", currentUser.id);
+    const recordType = String(table).replace(/^sge_/, "");
+    const {error} = await supabaseClient.from("sge_app_records").delete().eq("record_type", recordType).eq("record_id", String(id)).eq("user_id", currentUser.id);
     if (error) throw error;
   }
   async function loadAndMergeCloudData() {
     if (!supabaseClient || !currentUser) return;
     setCloudStatus("Carregando e mesclando registros…");
-    const [postsResult, metricsResult, segmentsResult, opportunitiesResult, campaignsResult] = await Promise.all([
-      supabaseClient.from("sge_posts").select("payload").eq("user_id", currentUser.id),
-      supabaseClient.from("sge_metrics").select("payload").eq("user_id", currentUser.id),
-      supabaseClient.from("sge_segments").select("payload").eq("user_id", currentUser.id),
-      supabaseClient.from("sge_opportunities").select("payload").eq("user_id", currentUser.id),
-      supabaseClient.from("sge_campaigns").select("payload").eq("user_id", currentUser.id)
-    ]);
-    for (const result of [postsResult, metricsResult, segmentsResult, opportunitiesResult, campaignsResult]) if (result.error) throw result.error;
+    const {data:remoteRecords,error} = await supabaseClient.from("sge_app_records").select("record_type,record_id,payload").eq("user_id", currentUser.id);
+    if (error) throw error;
     const merge = (local, remote) => {
-      const byId = new Map(remote.map(row => [row.payload?.id, row.payload]).filter(([id,p]) => id && p));
+      const byId = new Map(remote.map(row => [row.payload?.id || row.record_id, row.payload]).filter(([id,p]) => id && p));
       local.forEach(item => byId.set(item.id, item));
       return [...byId.values()];
     };
-    state.posts = merge(state.posts, postsResult.data || []);
-    state.metrics = merge(state.metrics, metricsResult.data || []);
-    state.segments = merge(state.segments, segmentsResult.data || []);
-    state.opportunities = merge(state.opportunities, opportunitiesResult.data || []);
-    state.campaigns = merge(state.campaigns, campaignsResult.data || []);
+    const records = remoteRecords || [];
+    state.posts = merge(state.posts, records.filter(r=>r.record_type==="posts"));
+    state.metrics = merge(state.metrics, records.filter(r=>r.record_type==="metrics"));
+    state.segments = merge(state.segments, records.filter(r=>r.record_type==="segments"));
+    state.opportunities = merge(state.opportunities, records.filter(r=>r.record_type==="opportunities"));
+    state.campaigns = merge(state.campaigns, records.filter(r=>r.record_type==="campaigns"));
     localStorage.setItem(STORE, JSON.stringify(state));
     renderAll();
     await syncLocalChanges();
     toast("Dados locais e da nuvem foram mesclados.");
   }
+  const supabaseUrlInput = $("supabaseProjectUrl");
+  const supabaseKeyInput = $("supabasePublishableKey");
+  const saveSupabaseConfigButton = $("saveSupabaseConfig");
+  if (supabaseUrlInput && supabaseKeyInput && saveSupabaseConfigButton) {
+    supabaseUrlInput.value = SUPABASE_URL;
+    supabaseKeyInput.value = SUPABASE_PUBLISHABLE_KEY;
+    saveSupabaseConfigButton.addEventListener("click", () => {
+      try {
+        const projectUrl = new URL(supabaseUrlInput.value.trim());
+        const publishableKey = supabaseKeyInput.value.trim();
+        if (projectUrl.protocol !== "https:" || !publishableKey.startsWith("sb_publishable_") && !publishableKey.startsWith("eyJ")) {
+          throw new Error("Informe a URL HTTPS do projeto dedicado e uma chave publicável (sb_publishable_…). Nunca use service_role.");
+        }
+        localStorage.setItem("socialGrowthEngine.supabaseUrl", projectUrl.toString().replace(/\/$/, ""));
+        localStorage.setItem("socialGrowthEngine.supabasePublishableKey", publishableKey);
+        toast("Configuração salva. Recarregando o painel…");
+        window.location.reload();
+      } catch (err) {
+        setCloudStatus(safeError(err), true);
+      }
+    });
+  }
   if (!supabaseClient) {
-    setCloudStatus("Biblioteca Supabase não carregou. Os dados locais continuam disponíveis.", true);
+    setCloudStatus("Configure a URL e a chave publicável do projeto Supabase exclusivo nas configurações. Seus dados locais continuam disponíveis.", true);
   } else {
     $("cloudAuthForm").addEventListener("submit", async e => {
       e.preventDefault();
@@ -144,7 +165,7 @@
   function showView(name) {
     document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id==="view-"+name));
     document.querySelectorAll(".nav-link").forEach(v=>v.classList.toggle("active",v.dataset.view===name));
-    const titles={overview:"Visão geral",discovery:"Descoberta de público",campaigns:"Campanhas",planner:"Planejamento",content:"Estúdio de conteúdo",analytics:"Análise de desempenho",settings:"Configurações"};
+    const titles={overview:"Visão geral",accounts:"Contas e publicações",discovery:"Descoberta de público",campaigns:"Campanhas e tráfego",planner:"Planejamento",content:"Estúdio de conteúdo",analytics:"Análise de desempenho",settings:"Configurações"};
     $("pageTitle").textContent=titles[name]||"Visão geral"; $("sidebar").classList.remove("open"); window.scrollTo({top:0,behavior:"smooth"});
   }
   document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>showView(b.dataset.view)));
@@ -231,10 +252,10 @@
     list.innerHTML=state.campaigns.length?state.campaigns.slice().sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")).map(c=>`
       <article class="campaign-card"><div class="campaign-card-head"><div><b>${esc(c.name)}</b><p>${esc(c.platform)} · ${esc(c.strategyLabel)} · ${esc(c.goal)}</p></div><span class="status-tag ${c.status==="Concluída"?"published":c.status==="Em andamento"?"ready":""}">${esc(c.status||"Planejada")}</span></div>
       <div class="campaign-facts"><span>Orçamento: <b>R$ ${Number(c.budget||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}</b></span><span>Meta: <b>${c.target?fmt(c.target):"Não definida"}</b></span></div>
-      <p class="campaign-notes">${esc(c.notes||"Sem observações registradas.")}</p>
+      <p class="campaign-notes">${c.destination?`Destino: <a href="${esc(c.destination)}" target="_blank" rel="noopener noreferrer">abrir link ↗</a><br>`:""}${c.region?`Região: ${esc(c.region)} · `:""}${c.age?`Faixa etária: ${esc(c.age)}<br>`:""}${c.postUrl?`Publicação: <a href="${esc(c.postUrl)}" target="_blank" rel="noopener noreferrer">abrir post ↗</a><br>`:""}${c.audience?`${esc(c.audience)}<br>`:""}${esc(c.notes||"Sem observações registradas.")}</p>
       <div class="campaign-actions"><label>Status<select data-campaign-status="${esc(c.id)}"><option ${(c.status||"Planejada")==="Planejada"?"selected":""}>Planejada</option><option ${c.status==="Em andamento"?"selected":""}>Em andamento</option><option ${c.status==="Pausada"?"selected":""}>Pausada</option><option ${c.status==="Concluída"?"selected":""}>Concluída</option></select></label><button class="row-action" data-edit-campaign="${esc(c.id)}">Editar</button><button class="row-action" data-delete-campaign="${esc(c.id)}">Excluir</button></div></article>`).join(""):'<div class="list-empty">Nenhuma campanha criada.</div>';
     list.querySelectorAll("[data-campaign-status]").forEach(el=>el.addEventListener("change",()=>{const c=state.campaigns.find(x=>x.id===el.dataset.campaignStatus);if(c){c.status=el.value;c.updatedAt=new Date().toISOString();save();toast("Status da campanha atualizado.");}}));
-    list.querySelectorAll("[data-edit-campaign]").forEach(b=>b.addEventListener("click",()=>{const c=state.campaigns.find(x=>x.id===b.dataset.editCampaign);if(!c)return;$("campaignName").value=c.name;$("campaignSegment").value=c.segmentId||"";$("campaignPlatform").value=c.platform;$("campaignStrategy").value=c.strategy;$("campaignGoal").value=c.goal;$("campaignStart").value=c.startDate||"";$("campaignEnd").value=c.endDate||"";$("campaignBudget").value=c.budget||0;$("campaignTarget").value=c.target||"";$("campaignNotes").value=c.notes||"";$("campaignForm").dataset.editId=c.id;$("campaignForm").querySelector("button[type=submit]").textContent="Salvar alterações";showView("campaigns");}));
+    list.querySelectorAll("[data-edit-campaign]").forEach(b=>b.addEventListener("click",()=>{const c=state.campaigns.find(x=>x.id===b.dataset.editCampaign);if(!c)return;$("campaignName").value=c.name;$("campaignSegment").value=c.segmentId||"";$("campaignPlatform").value=c.platform;$("campaignStrategy").value=c.strategy;$("campaignGoal").value=c.goal;$("campaignStart").value=c.startDate||"";$("campaignEnd").value=c.endDate||"";$("campaignBudget").value=c.budget||0;$("campaignTarget").value=c.target||"";$("campaignDestination").value=c.destination||"";$("campaignRegion").value=c.region||"";$("campaignAge").value=c.age||"";$("campaignAudience").value=c.audience||"";$("campaignPostUrl").value=c.postUrl||"";$("campaignNotes").value=c.notes||"";$("campaignForm").dataset.editId=c.id;$("campaignForm").querySelector("button[type=submit]").textContent="Salvar alterações";showView("campaigns");}));
     list.querySelectorAll("[data-delete-campaign]").forEach(b=>b.addEventListener("click",()=>{if(!confirm("Excluir esta campanha?"))return;const id=b.dataset.deleteCampaign;state.campaigns=state.campaigns.filter(c=>c.id!==id);deleteCloudRecord("sge_campaigns",id).catch(err=>setCloudStatus("Erro ao excluir campanha na nuvem: "+safeError(err),true));save();toast("Campanha excluída.");}));
   }
   $("campaignForm").addEventListener("submit",e=>{
@@ -242,7 +263,7 @@
     const form=$("campaignForm"),existing=state.campaigns.find(c=>c.id===form.dataset.editId);
     const segment=state.segments.find(s=>s.id===$("campaignSegment").value);
     const strategy=$("campaignStrategy").value;
-    const item={id:existing?.id||uid(),name:$("campaignName").value.trim(),segmentId:segment?.id||"",segmentName:segment?.name||"",platform:$("campaignPlatform").value,strategy,strategyLabel:strategy==="organic"?"Orgânica":strategy==="paid"?"Anúncios pagos":"Orgânica + anúncios",goal:$("campaignGoal").value,startDate:$("campaignStart").value,endDate:$("campaignEnd").value,budget:Number($("campaignBudget").value||0),target:Number($("campaignTarget").value||0),notes:$("campaignNotes").value.trim(),status:existing?.status||"Planejada",createdAt:existing?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
+    const item={id:existing?.id||uid(),name:$("campaignName").value.trim(),segmentId:segment?.id||"",segmentName:segment?.name||"",platform:$("campaignPlatform").value,strategy,strategyLabel:strategy==="organic"?"Orgânica":strategy==="paid"?"Anúncios pagos":"Orgânica + anúncios",goal:$("campaignGoal").value,startDate:$("campaignStart").value,endDate:$("campaignEnd").value,budget:Number($("campaignBudget").value||0),target:Number($("campaignTarget").value||0),destination:$("campaignDestination").value.trim(),region:$("campaignRegion").value.trim(),age:$("campaignAge").value.trim(),audience:$("campaignAudience").value.trim(),postUrl:$("campaignPostUrl").value.trim(),notes:$("campaignNotes").value.trim(),status:existing?.status||"Planejada",approvalRequired:true,createdAt:existing?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
     if(item.startDate&&item.endDate&&item.endDate<item.startDate){toast("A data final não pode ser anterior à inicial.");return;}
     if(existing)state.campaigns=state.campaigns.map(c=>c.id===existing.id?item:c);else state.campaigns.push(item);
     delete form.dataset.editId;form.reset();$("campaignBudget").value="0";form.querySelector("button[type=submit]").textContent="Salvar campanha";save();toast(existing?"Campanha atualizada.":"Campanha salva.");
@@ -268,5 +289,400 @@
   $("importBackup").addEventListener("change",async e=>{const file=e.target.files[0];if(!file)return;try{const data=JSON.parse(await file.text());if(!Array.isArray(data.posts)||!Array.isArray(data.metrics))throw Error("Formato inválido");if(!confirm("Importar este backup substituirá os dados atuais deste navegador. Deseja continuar?"))return;state={posts:data.posts,metrics:data.metrics,segments:Array.isArray(data.segments)?data.segments:[],opportunities:Array.isArray(data.opportunities)?data.opportunities:[],campaigns:Array.isArray(data.campaigns)?data.campaigns:[]};save();toast("Backup importado.");}catch(err){toast("Arquivo inválido. Nenhum dado foi importado.");}finally{e.target.value="";}});
   $("clearData").onclick=()=>{if(confirm("Isso apagará os conteúdos e métricas salvos neste navegador. Exporte um backup antes. Continuar?")){state={posts:[],metrics:[],segments:[],opportunities:[],campaigns:[]};save();toast("Dados locais apagados.");}};
   $("exportCsv").onclick=()=>{if(!state.metrics.length){toast("Não há métricas para exportar.");return;}const cols=["title","platform","date","views","reach","likes","comments","shares","followers","retention"];const quote=v=>'"'+String(v??"").replace(/"/g,'""')+'"';const csv=[cols.join(";"),...state.metrics.map(m=>cols.map(k=>quote(m[k])).join(";"))].join("\r\n");download("social-growth-metricas.csv","\ufeff"+csv,"text/csv;charset=utf-8");};
+  const META_ENDPOINT_STORE = "socialGrowthEngine.metaFunctionUrl.v1";
+  const metaFunctionInput = $("metaFunctionUrl");
+  const metaConnectButton = $("metaConnect");
+  const metaStatus = $("metaStatus");
+  if (metaFunctionInput && metaConnectButton && metaStatus) {
+    metaFunctionInput.value = localStorage.getItem(META_ENDPOINT_STORE) || "https://rvgcniaowzmsudzliozf.supabase.co/functions/v1/meta-oauth";
+    const callbackStatus = new URLSearchParams(window.location.search).get("meta");
+    if (callbackStatus === "connected") {
+      metaStatus.textContent = "Instagram conectado com sucesso. O token foi salvo criptografado no backend.";
+      metaStatus.classList.remove("error");
+      toast("Instagram conectado.");
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("meta");
+      window.history.replaceState({}, "", cleanUrl.toString());
+    } else if (callbackStatus === "error") {
+      metaStatus.textContent = "Não foi possível concluir a conexão. Confira as permissões, redirect URI e secrets da função.";
+      metaStatus.classList.add("error");
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("meta");
+      window.history.replaceState({}, "", cleanUrl.toString());
+    }
+    metaFunctionInput.addEventListener("change", () => {
+      localStorage.setItem(META_ENDPOINT_STORE, metaFunctionInput.value.trim());
+    });
+    metaConnectButton.addEventListener("click", async () => {
+      if (!supabaseClient) {
+        metaStatus.textContent = "O cliente Supabase não carregou. Verifique a configuração da nuvem.";
+        metaStatus.classList.add("error");
+        return;
+      }
+      let endpoint;
+      try {
+        endpoint = new URL(metaFunctionInput.value.trim());
+        if (endpoint.protocol !== "https:" || !endpoint.pathname.endsWith("/functions/v1/meta-oauth")) {
+          throw new Error("Informe a URL HTTPS completa da função /functions/v1/meta-oauth.");
+        }
+      } catch (err) {
+        metaStatus.textContent = safeError(err);
+        metaStatus.classList.add("error");
+        return;
+      }
+      localStorage.setItem(META_ENDPOINT_STORE, endpoint.toString().replace(/\/$/, ""));
+      metaConnectButton.disabled = true;
+      metaStatus.classList.remove("error");
+      metaStatus.textContent = "Preparando conexão segura com a Meta…";
+      try {
+        const { data: { session }, error: sessionError } = await supabaseClient.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!session?.access_token) throw new Error("Entre na conta do Social Growth Engine antes de conectar o Instagram.");
+        endpoint.searchParams.set("action", "start");
+        const response = await fetch(endpoint.toString(), {
+          method: "POST",
+          headers: {
+            "Authorization": "Bearer " + session.access_token,
+            "Content-Type": "application/json"
+          },
+          body: "{}"
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.authorization_url) {
+          throw new Error(payload.error || "A função de conexão não respondeu corretamente. Verifique a implantação e os secrets.");
+        }
+        metaStatus.textContent = "Redirecionando para a autorização oficial do Instagram…";
+        window.location.assign(payload.authorization_url);
+      } catch (err) {
+        metaStatus.textContent = safeError(err);
+        metaStatus.classList.add("error");
+      } finally {
+        metaConnectButton.disabled = false;
+      }
+    });
+  }
+  // Instagram account library: browser calls only the authenticated Edge Function.
+  const accountsStatus = $("instagramAccountsStatus");
+  const accountsList = $("instagramAccountsList");
+  const postsStatus = $("instagramPostsStatus");
+  const postsGrid = $("instagramPostsGrid");
+  const selectedAccountLabel = $("instagramSelectedAccount");
+  let instagramAccounts = [];
+  let selectedInstagramAccountId = "";
+  function metaEndpointFor(action) {
+    const saved = localStorage.getItem(META_ENDPOINT_STORE) || "";
+    if (!saved) throw new Error("Configure a URL da função Meta em Configurações primeiro.");
+    const endpoint = new URL(saved);
+    if (endpoint.protocol !== "https:" || !endpoint.pathname.endsWith("/functions/v1/meta-oauth")) throw new Error("A URL da função Meta não parece válida.");
+    endpoint.searchParams.set("action", action);
+    return endpoint;
+  }
+  async function callMeta(action, extra = {}) {
+    if (!supabaseClient) throw new Error("Configure o Supabase em Configurações primeiro.");
+    const {data:{session},error} = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    if (!session?.access_token) throw new Error("Entre na sua conta do Social Growth Engine em Configurações.");
+    const endpoint = metaEndpointFor(action);
+    Object.entries(extra).forEach(([key,value])=>endpoint.searchParams.set(key,String(value)));
+    const response = await fetch(endpoint.toString(), {headers:{Authorization:"Bearer "+session.access_token}});
+    const payload = await response.json().catch(()=>({}));
+    if (!response.ok) throw new Error(payload.error || "Falha ao consultar a API Meta.");
+    return payload;
+  }
+  function renderInstagramAccounts() {
+    if (!accountsList) return;
+    if (!instagramAccounts.length) { accountsList.innerHTML = '<div class="list-empty">Nenhuma conta conectada foi encontrada. Use “Conectar conta” para autorizar uma conta profissional.</div>'; return; }
+    accountsList.innerHTML = instagramAccounts.map(a => '<button type="button" class="instagram-account-card '+(a.instagram_user_id===selectedInstagramAccountId?"selected":"")+'" data-select-instagram-account="'+esc(a.instagram_user_id)+'"><span class="account-avatar">◎</span><span class="account-info"><b>@'+esc(a.instagram_username||"Instagram")+'</b><small>Conectada em '+(a.connected_at?new Date(a.connected_at).toLocaleDateString("pt-BR"):"data indisponível")+'</small></span><span class="account-select-mark">→</span></button>').join("");
+    accountsList.querySelectorAll("[data-select-instagram-account]").forEach(b=>b.addEventListener("click",()=>loadInstagramPosts(b.dataset.selectInstagramAccount)));
+  }
+  async function loadInstagramAccounts() {
+    if (!accountsStatus) return;
+    accountsStatus.classList.remove("error"); accountsStatus.textContent = "Carregando contas autorizadas…";
+    if (postsGrid) postsGrid.innerHTML = '<div class="list-empty">Selecione uma conta para carregar as publicações.</div>';
+    try {
+      const payload = await callMeta("accounts"); instagramAccounts = Array.isArray(payload.accounts)?payload.accounts:[];
+      if (!instagramAccounts.some(a=>a.instagram_user_id===selectedInstagramAccountId)) selectedInstagramAccountId = instagramAccounts[0]?.instagram_user_id || "";
+      renderInstagramAccounts(); accountsStatus.textContent = instagramAccounts.length ? instagramAccounts.length+" conta(s) autorizada(s)." : "Nenhuma conta conectada. Clique em “Conectar conta”.";
+      if (selectedInstagramAccountId) await loadInstagramPosts(selectedInstagramAccountId);
+    } catch(err) { accountsStatus.textContent = safeError(err); accountsStatus.classList.add("error"); renderInstagramAccounts(); }
+  }
+  async function loadInstagramPosts(accountId) {
+    selectedInstagramAccountId = accountId;
+    const account = instagramAccounts.find(a=>a.instagram_user_id===accountId);
+    if (selectedAccountLabel) selectedAccountLabel.textContent = account ? "@"+(account.instagram_username||"Instagram") : "Conta selecionada";
+    renderInstagramAccounts(); if (!postsStatus || !postsGrid) return;
+    postsStatus.textContent = "Carregando publicações autorizadas…"; postsGrid.innerHTML = '<div class="list-empty">Consultando o Instagram…</div>';
+    try {
+      const payload = await callMeta("posts",{account_id:accountId}); const posts = Array.isArray(payload.posts)?payload.posts:[];
+      postsStatus.textContent = posts.length+" publicação(ões) retornada(s) pela API.";
+      postsGrid.innerHTML = posts.length ? posts.map(p=>{
+        const image = p.thumbnail_url || p.media_url || ""; const safeImage = /^https?:\/\//i.test(image) ? esc(image) : "";
+        const caption = String(p.caption||"").slice(0,220); const date = p.timestamp ? new Date(p.timestamp).toLocaleDateString("pt-BR") : "Data indisponível";
+        return '<article class="instagram-post-card">'+(safeImage?'<img loading="lazy" src="'+safeImage+'" alt="Prévia da publicação" referrerpolicy="no-referrer">':'<div class="post-image-placeholder">◎</div>')+
+          '<div class="instagram-post-body"><span class="pill">'+esc(p.media_type||"POST")+'</span><small>'+esc(date)+'</small><p>'+esc(caption||"Sem legenda")+(caption.length>=220?"…":"")+'</p><div class="post-stats"><span>♡ '+(p.like_count??"—")+'</span><span>◌ '+(p.comments_count??"—")+'</span></div><div class="button-row"><a class="btn btn-secondary" href="'+esc(p.permalink||"#")+'" target="_blank" rel="noopener noreferrer">Abrir post ↗</a><button class="btn btn-primary" type="button" data-use-post="'+esc(p.id)+'">Usar no tráfego</button></div></div></article>';
+      }).join("") : '<div class="list-empty">A API não retornou publicações. Verifique permissões, tipo de conta e disponibilidade dos campos.</div>';
+      postsGrid.querySelectorAll("[data-use-post]").forEach(b=>b.addEventListener("click",()=>{
+        const post=posts.find(p=>String(p.id)===b.dataset.usePost); if(!post)return;
+        $("campaignPostUrl").value=post.permalink||""; if(!$("campaignName").value.trim()) $("campaignName").value="Tráfego · "+(account?.instagram_username||"Instagram");
+        $("campaignPlatform").value="Instagram"; showView("campaigns"); toast("Publicação selecionada para o plano de tráfego. Revise público, link e orçamento.");
+      }));
+    } catch(err) { postsStatus.textContent = safeError(err); postsGrid.innerHTML = '<div class="list-empty">Não foi possível carregar as publicações.</div>'; }
+  }
+  if ($("refreshInstagramAccounts")) $("refreshInstagramAccounts").addEventListener("click",loadInstagramAccounts);
+  if ($("connectInstagramFromAccounts")) $("connectInstagramFromAccounts").addEventListener("click",()=>showView("settings"));
+  if (accountsStatus) { const callback = new URLSearchParams(window.location.search).get("meta"); if(callback==="connected"||callback==="error"){showView("accounts");if(callback==="connected")loadInstagramAccounts();} }
+  // Meta Marketing API: connect an ad account, create paused scaffolding only.
+  const META_ADS_URL_KEY = "socialGrowthEngine.metaAdsFunctionUrl.v1";
+  const META_ADS_ACCOUNT_KEY = "socialGrowthEngine.metaAdsAccountId.v1";
+  const metaAdsUrlInput = $("metaAdsFunctionUrl");
+  const metaAdsConnect = $("metaAdsConnect");
+  const metaAdsRefresh = $("metaAdsRefresh");
+  const metaAdsStatus = $("metaAdsStatus");
+  const metaAdsAccount = $("metaAdsAccount");
+  const metaAdsCreatePaused = $("metaAdsCreatePaused");
+  const metaAdsJobs = $("metaAdsJobs");
+
+  function metaAdsEndpoint(action) {
+    const raw = (metaAdsUrlInput?.value || localStorage.getItem(META_ADS_URL_KEY) || "").trim();
+    const endpoint = new URL(raw);
+    if (endpoint.protocol !== "https:" || !endpoint.pathname.endsWith("/functions/v1/meta-ads")) {
+      throw new Error("Informe a URL HTTPS completa da função /functions/v1/meta-ads.");
+    }
+    endpoint.searchParams.set("action", action);
+    return endpoint;
+  }
+  async function metaAdsRequest(action, method = "GET", body = null) {
+    if (!supabaseClient) throw new Error("Configure o Supabase em Configurações.");
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    if (!session?.access_token) throw new Error("Entre na sua conta do Social Growth Engine em Configurações.");
+    const endpoint = metaAdsEndpoint(action);
+    const options = { method, headers: { Authorization: "Bearer " + session.access_token } };
+    if (body !== null) {
+      options.headers["Content-Type"] = "application/json";
+      options.body = JSON.stringify(body);
+    }
+    const response = await fetch(endpoint.toString(), options);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Falha na integração Meta Ads.");
+    return payload;
+  }
+  function setMetaAdsStatus(message, isError = false) {
+    if (!metaAdsStatus) return;
+    metaAdsStatus.textContent = message;
+    metaAdsStatus.classList.toggle("error", isError);
+  }
+  function renderMetaAdsJobs(jobs) {
+    if (!metaAdsJobs) return;
+    if (!jobs?.length) {
+      metaAdsJobs.innerHTML = '<div class="list-empty">Nenhuma estrutura de campanha registrada pela API.</div>';
+      return;
+    }
+    metaAdsJobs.innerHTML = jobs.map(job => {
+      const status = job.review_status === "created_paused" ? "Criada pausada" :
+        job.review_status === "failed" ? "Falha parcial/total" :
+        job.review_status === "active" ? "Ativa" : job.review_status;
+      return '<article class="campaign-card"><div class="campaign-card-head"><div><b>' + esc(job.campaign_name) + '</b><p>Conta act_' + esc(job.ad_account_id) + ' · ' + esc(job.objective) + '</p></div><span class="status-tag">' + esc(status) + '</span></div>' +
+        '<div class="campaign-facts"><span>Orçamento vitalício: <b>R$ ' + Number(job.budget_amount || 0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}) + '</b></span><span>Datas: <b>' + esc(job.start_date) + ' → ' + esc(job.end_date) + '</b></span></div>' +
+        '<p class="campaign-notes">ID campanha: ' + esc(job.campaign_id || "não confirmado") + '<br>ID conjunto: ' + esc(job.adset_id || "não confirmado") + '<br>Estado seguro: nenhum anúncio/criativo criado por este fluxo.</p></article>';
+    }).join("");
+  }
+  async function loadMetaAdsAccounts() {
+    if (!metaAdsAccount) return;
+    setMetaAdsStatus("Consultando as contas de anúncios autorizadas…");
+    try {
+      localStorage.setItem(META_ADS_URL_KEY, metaAdsUrlInput.value.trim());
+      const payload = await metaAdsRequest("accounts");
+      const accounts = Array.isArray(payload.accounts) ? payload.accounts : [];
+      const saved = localStorage.getItem(META_ADS_ACCOUNT_KEY) || "";
+      metaAdsAccount.innerHTML = '<option value="">Selecione uma conta de anúncios</option>' + accounts.map(a => {
+        const label = (a.ad_account_name || "Conta Meta") + " · act_" + a.ad_account_id + " · " + (a.currency || "?") + (Number(a.account_status) === 1 ? " · ativa" : " · status " + a.account_status);
+        return '<option value="' + esc(a.ad_account_id) + '" data-currency="' + esc(a.currency || "") + '" data-status="' + esc(a.account_status) + '">' + esc(label) + '</option>';
+      }).join("");
+      if (accounts.some(a => a.ad_account_id === saved)) metaAdsAccount.value = saved;
+      setMetaAdsStatus(accounts.length ? accounts.length + " conta(s) de anúncios encontradas. Selecione a conta correta." : "Nenhuma conta de anúncios acessível. Confira se o perfil tem acesso no Gerenciador de Anúncios e se a Meta concedeu as permissões.");
+      if (!accounts.length) metaAdsAccount.innerHTML = '<option value="">Nenhuma conta de anúncios acessível</option>';
+      const jobs = await metaAdsRequest("jobs");
+      renderMetaAdsJobs(jobs.jobs || []);
+    } catch (err) {
+      setMetaAdsStatus(safeError(err), true);
+    }
+  }
+  if (metaAdsUrlInput && metaAdsConnect && metaAdsRefresh && metaAdsStatus && metaAdsAccount && metaAdsCreatePaused) {
+    metaAdsUrlInput.value = localStorage.getItem(META_ADS_URL_KEY) || "https://rvgcniaowzmsudzliozf.supabase.co/functions/v1/meta-ads";
+    metaAdsAccount.addEventListener("change", () => localStorage.setItem(META_ADS_ACCOUNT_KEY, metaAdsAccount.value));
+    metaAdsUrlInput.addEventListener("change", () => localStorage.setItem(META_ADS_URL_KEY, metaAdsUrlInput.value.trim()));
+    metaAdsConnect.addEventListener("click", async () => {
+      try {
+        localStorage.setItem(META_ADS_URL_KEY, metaAdsUrlInput.value.trim());
+        setMetaAdsStatus("Iniciando autorização oficial da Meta…");
+        metaAdsConnect.disabled = true;
+        const payload = await metaAdsRequest("start", "POST", {});
+        if (!payload.authorization_url) throw new Error("A Meta não retornou o endereço de autorização.");
+        window.location.assign(payload.authorization_url);
+      } catch (err) {
+        setMetaAdsStatus(safeError(err), true);
+        metaAdsConnect.disabled = false;
+      }
+    });
+    metaAdsRefresh.addEventListener("click", loadMetaAdsAccounts);
+    metaAdsCreatePaused.addEventListener("click", async () => {
+      try {
+        if (!metaAdsAccount.value) throw new Error("Conecte e selecione uma conta de anúncios.");
+        const name = $("campaignName").value.trim();
+        const destination = $("campaignDestination").value.trim();
+        const budget = Number($("campaignBudget").value || 0);
+        const startDate = $("campaignStart").value;
+        const endDate = $("campaignEnd").value;
+        const ageRange = $("campaignAge").value.trim();
+        if (!name) throw new Error("Preencha o nome da campanha no formulário à esquerda.");
+        if (!/^https:\/\//i.test(destination)) throw new Error("Informe um link HTTPS no campo de destino.");
+        if (!Number.isFinite(budget) || budget < 20 || budget > 10000) throw new Error("Nesta primeira versão, o orçamento total deve ficar entre R$ 20 e R$ 10.000.");
+        if (!startDate || !endDate) throw new Error("Defina data inicial e final futuras no formulário.");
+        if (endDate < startDate) throw new Error("A data final não pode ser anterior à inicial.");
+        const typed = prompt('ATENÇÃO: será criada uma campanha e um conjunto de anúncios PAUSADOS. Nenhum anúncio será criado nem ativado. Orçamento total: R$ ' + budget.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}) + '.\n\nPara confirmar a criação pausada, digite exatamente: CRIAR CAMPANHA PAUSADA');
+        if (typed !== "CRIAR CAMPANHA PAUSADA") { setMetaAdsStatus("Criação cancelada. Nenhuma solicitação foi enviada à Meta."); return; }
+        metaAdsCreatePaused.disabled = true;
+        setMetaAdsStatus("Enviando solicitação confirmada à API oficial da Meta…");
+        const payload = await metaAdsRequest("create-paused", "POST", {
+          confirm: typed,
+          ad_account_id: metaAdsAccount.value,
+          name,
+          objective: "OUTCOME_TRAFFIC",
+          destination_url: destination,
+          budget_total_brl: budget,
+          start_date: startDate,
+          end_date: endDate,
+          age_range: ageRange,
+          region: $("campaignRegion").value.trim(),
+          audience: $("campaignAudience").value.trim(),
+          notes: $("campaignNotes").value.trim()
+        });
+        setMetaAdsStatus("Estrutura criada em PAUSED. ID da campanha: " + payload.campaign_id + ". Nenhum anúncio foi criado ou ativado.");
+        toast("Estrutura de campanha criada pausada na Meta.");
+        await loadMetaAdsAccounts();
+      } catch (err) {
+        setMetaAdsStatus(safeError(err), true);
+      } finally {
+        metaAdsCreatePaused.disabled = false;
+      }
+    });
+    const callback = new URLSearchParams(window.location.search).get("meta_ads");
+    if (callback) {
+      showView("campaigns");
+      if (callback === "connected") {
+        setMetaAdsStatus("Conta(s) de anúncios conectada(s) à plataforma. Clique em Atualizar contas para conferir.");
+        loadMetaAdsAccounts();
+      } else if (callback === "no_accounts") {
+        setMetaAdsStatus("A autorização foi concluída, mas a Meta não retornou contas de anúncios acessíveis.", true);
+      } else {
+        setMetaAdsStatus("Não foi possível concluir a autorização. Confira o redirect URI, os secrets e as permissões ads_read / ads_management.", true);
+      }
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("meta_ads");
+      window.history.replaceState({}, "", cleanUrl.toString());
+    }
+  }
+
+
+  const TRACKING_FUNCTION_URL = SUPABASE_URL + "/functions/v1/sge-tracking";
+  let trackingWorkspace = null;
+  function trackingStatus(message, isError=false) {
+    const el = $("trackingStatus");
+    if (el) { el.textContent = message; el.classList.toggle("error", isError); }
+  }
+  async function trackingRequest(action, method="GET", body=null) {
+    if (!supabaseClient) throw new Error("A conexão Supabase não está configurada.");
+    const { data } = await supabaseClient.auth.getSession();
+    const headers = { "apikey": SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" };
+    if (data.session?.access_token) headers.Authorization = "Bearer " + data.session.access_token;
+    const response = await fetch(TRACKING_FUNCTION_URL + "?action=" + encodeURIComponent(action), {
+      method, headers, ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Não foi possível concluir a solicitação.");
+    return payload;
+  }
+  function trackingPixelSnippet(publicKey) {
+    const endpoint = TRACKING_FUNCTION_URL + "?action=track";
+    return `<script>
+(()=> {
+  const endpoint = ${JSON.stringify(endpoint)};
+  const publicKey = ${JSON.stringify(publicKey)};
+  const apiKey = ${JSON.stringify(SUPABASE_PUBLISHABLE_KEY)};
+  const event = (eventType) => {
+    try {
+      let visitorId = localStorage.getItem("sge_tracking_visitor");
+      if (!visitorId) {
+        visitorId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
+        localStorage.setItem("sge_tracking_visitor", visitorId);
+      }
+      const q = new URLSearchParams(location.search);
+      const payload = {public_key:publicKey,event_type:eventType,visitor_id:visitorId,page_path:location.pathname,referrer:document.referrer,source:q.get("utm_source"),medium:q.get("utm_medium"),campaign:q.get("utm_campaign"),content:q.get("utm_content"),term:q.get("utm_term")};
+      fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","apikey":apiKey},body:JSON.stringify(payload),keepalive:true}).catch(()=>{});
+    } catch (_) {}
+  };
+  event("page_view");
+  if (document.querySelector("[data-sge-product]")) event("product_view");
+  document.addEventListener("click",(e)=>{if(e.target.closest("[data-sge-cta]"))event("cta_click");if(e.target.closest("[data-sge-lead]"))event("lead_click");},{passive:true});
+})();
+<\/script>`;
+  }
+  async function loadTrackingWorkspace() {
+    if (!currentUser) { trackingStatus("Entre na sua conta na seção Configurações para ativar o rastreamento."); return; }
+    trackingStatus("Configurando seu espaço de rastreamento…");
+    try {
+      const data = await trackingRequest("setup","POST",{});
+      trackingWorkspace = data.workspace;
+      localStorage.setItem("sgeTrackingPublicKey",trackingWorkspace.public_key);
+      $("trackingPixelCode").value = trackingPixelSnippet(trackingWorkspace.public_key);
+      trackingStatus("Rastreamento pronto. Crie links rastreáveis ou instale o pixel na página de vendas.");
+      await loadTrackingSummary();
+    } catch (err) { trackingStatus(safeError(err),true); }
+  }
+  async function loadTrackingSummary() {
+    if (!currentUser) return;
+    try {
+      const data = await trackingRequest("summary");
+      const c = data.counts || {};
+      $("trackPageViews").textContent = fmt(c.page_view || 0);
+      $("trackProductViews").textContent = fmt(c.product_view || 0);
+      $("trackCtaClicks").textContent = fmt(c.cta_click || 0) + (c.lead_click ? " · leads " + fmt(c.lead_click) : "");
+      $("trackOutboundClicks").textContent = fmt(c.outbound_click || 0);
+      const links = data.links || [];
+      $("trackingLinksList").innerHTML = links.length ? links.map(link => {
+        const url = TRACKING_FUNCTION_URL + "?action=go&code=" + encodeURIComponent(link.code);
+        return `<article class="tracking-link-card"><div class="tracking-link-title"><div><b>${esc(link.label)}</b><small>${esc(link.source)} · ${esc(link.medium)} · ${esc(link.campaign)}</small></div><strong>${fmt(link.clicks_30d || 0)} cliques</strong></div><div class="tracking-link-destination">${esc(link.destination_url)}</div><div class="tracking-link-actions"><input aria-label="Link rastreável" readonly value="${esc(url)}"><button class="btn btn-secondary" type="button" data-copy-tracking="${esc(url)}">Copiar link</button></div></article>`;
+      }).join("") : '<div class="list-empty">Ainda não há links. Crie o primeiro acima.</div>';
+      $("trackingLinksList").querySelectorAll("[data-copy-tracking]").forEach(button => button.addEventListener("click",async()=>{
+        try { await navigator.clipboard.writeText(button.dataset.copyTracking); toast("Link rastreável copiado."); }
+        catch { toast("Não foi possível copiar automaticamente; selecione o link e copie."); }
+      }));
+    } catch (err) { trackingStatus(safeError(err),true); }
+  }
+  function initTrackingUI() {
+    $("trackingEnable").addEventListener("click",loadTrackingWorkspace);
+    $("trackingRefresh").addEventListener("click",loadTrackingSummary);
+    $("trackingCopyPixel").addEventListener("click",async()=>{
+      const code=$("trackingPixelCode").value;
+      if(!code){toast("Ative o rastreamento primeiro.");return;}
+      try{await navigator.clipboard.writeText(code);toast("Código do pixel copiado.");}
+      catch{$("trackingPixelCode").focus();$("trackingPixelCode").select();toast("Código selecionado. Use Ctrl+C para copiar.");}
+    });
+    $("trackingLinkForm").addEventListener("submit",async e=>{
+      e.preventDefault();
+      if(!currentUser){trackingStatus("Entre na sua conta em Configurações antes de criar links.",true);return;}
+      const button=$("trackingLinkForm").querySelector('button[type="submit"]');button.disabled=true;
+      try{
+        const data=await trackingRequest("create-link","POST",{label:$("trackingLabel").value.trim(),destination_url:$("trackingDestination").value.trim(),source:$("trackingSource").value,medium:$("trackingMedium").value,campaign:$("trackingCampaign").value.trim()||"fluent-immersion-kits"});
+        $("trackingLinkForm").reset();$("trackingCampaign").value="fluent-immersion-kits";
+        trackingStatus("Link rastreável criado. Copie-o e use-o na divulgação.");toast("Link rastreável criado.");
+        await loadTrackingSummary();
+        if(data.tracking_url&&navigator.clipboard?.writeText){try{await navigator.clipboard.writeText(data.tracking_url);toast("Link criado e copiado para a área de transferência.");}catch{}}
+      }catch(err){trackingStatus(safeError(err),true);}finally{button.disabled=false;}
+    });
+  }
+
+  initTrackingUI();
   renderAll();
 })();

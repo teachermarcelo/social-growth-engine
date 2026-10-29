@@ -1,6 +1,6 @@
 # Social Growth Engine
 
-Painel semiautomático para planejar conteúdo de Instagram e YouTube, gerar ideias de ganchos, registrar métricas e exportar relatórios. Protótipo estático em HTML, CSS e JavaScript puro, adequado para GitHub Pages.
+Painel semiautomático para planejar conteúdo de Instagram e YouTube, gerar ideias de ganchos, registrar métricas e exportar relatórios. A interface é estática para GitHub Pages; integrações que exigem tokens usam funções backend e secrets protegidos.
 
 ## Estado desta versão
 
@@ -15,7 +15,9 @@ Painel semiautomático para planejar conteúdo de Instagram e YouTube, gerar ide
 - Dados guardados no `localStorage` do navegador e sincronização opcional com Supabase por conta autenticada.
 - Tabelas exclusivas `sge_posts`, `sge_metrics`, `sge_segments`, `sge_opportunities` e `sge_campaigns`, com RLS para separar os dados de cada usuário.
 - Mesclagem de dados locais e da nuvem no login; exportação JSON continua disponível como backup.
-- **Não há conexão configurada com Instagram/Meta ou YouTube APIs.** Nenhuma publicação é enviada automaticamente e nenhum indicador é obtido diretamente das plataformas.
+- Integração Instagram: esta branch inclui o fluxo inicial de OAuth oficial e o armazenamento criptografado do token no backend; ainda exige projeto Supabase dedicado, secrets, configuração do app Meta e teste real antes de conectar.
+- YouTube: ainda sem integração de API.
+- Nenhuma publicação automática está ativa; o fluxo é semiautomático e exige revisão/aprovação humana.
 
 ## Executar localmente
 
@@ -27,11 +29,11 @@ Não há dependências de build nem chaves necessárias para a versão local.
 
 ## Publicar com GitHub Pages
 
-1. Crie um **repositório novo** chamado `social-growth-engine` na sua conta GitHub.
-2. Envie todos os arquivos e pastas deste pacote para a raiz do repositório.
-3. Abra **Settings → Pages**.
-4. Em **Build and deployment**, selecione **Deploy from a branch**, branch `main` e pasta `/ (root)`.
-5. Salve e aguarde o GitHub publicar o site. O endereço exato será mostrado nas configurações do Pages.
+1. Este projeto já está no repositório `teachermarcelo/social-growth-engine`; mantenha-o separado de `teacher-plataforma` e dos demais projetos.
+2. Para testar as alterações desta branch, abra um Pull Request de `feat/secure-meta-oauth` para `main` e revise antes de mesclar.
+3. Abra **Settings → Pages** e confirme a configuração de publicação.
+4. O workflow em `.github/workflows/pages.yml` valida o JavaScript e publica o site quando houver push em `main`.
+5. O endereço de publicação fica nas configurações do Pages. Não publique secrets no repositório.
 
 Mantenha este projeto separado dos seus repositórios existentes. Não copie arquivos sobre `teacher-plataforma` e não altere tabelas ou credenciais do Supabase existente.
 
@@ -54,7 +56,7 @@ A taxa agregada de engajamento por visualização é calculada como:
 
 ## Supabase: configuração aplicada
 
-O app usa o cliente JavaScript oficial via CDN, o Project URL e uma chave publicável (não secreta). O esquema foi criado no projeto Supabase exclusivo `social-growth-engine`. As tabelas `sge_posts`, `sge_metrics`, `sge_segments`, `sge_opportunities` e `sge_campaigns` têm Row Level Security (RLS) e políticas para permitir que cada usuário autenticado leia e altere somente os próprios registros.
+O app usa o cliente JavaScript oficial via CDN, o Project URL e uma chave publicável (não secreta). O app exige que a URL do projeto Supabase dedicado e a chave publicável sejam informadas em **Configurações → Sincronização na nuvem**. Nenhum projeto antigo é selecionado automaticamente. O acesso às tabelas de conteúdo deve ser protegido por RLS para que cada usuário autenticado veja apenas os próprios registros. A migração `supabase/migrations/20261028_sge_meta_oauth.sql` adiciona tabelas privadas para OAuth e não deve ser aplicada a nenhum outro projeto.
 
 1. Abra **Configurações → Sincronização na nuvem**.
 2. Crie uma conta com e-mail e senha; se a confirmação por e-mail estiver ativa, confirme o endereço antes de entrar.
@@ -67,10 +69,10 @@ A sincronização foi implementada, mas ainda depende de um teste no navegador c
 
 ### Instagram
 
-- Avaliar os requisitos atuais da Meta Platform API para o tipo de conta e os recursos pretendidos.
-- Implementar autenticação OAuth, permissões aprovadas e fluxo de renovação de tokens.
-- Usar backend para guardar tokens em segredos/variáveis de ambiente.
-- Implementar apenas endpoints de publicação e insights autorizados para a conta e o tipo de mídia.
+- O código inicial está em `supabase/functions/meta-oauth/index.ts` e a migração em `supabase/migrations/20261028_sge_meta_oauth.sql`.
+- Siga `INTEGRATION-SETUP.md` para configurar app Meta, redirect URI, secrets, criptografia e publicar a Edge Function.
+- A função deve ser implantada com validação JWT do gateway desativada (`verify_jwt=false`) porque o callback OAuth vem da Meta; a rota de início valida manualmente o JWT do usuário e o callback valida um state aleatório de uso único.
+- A integração não está ativa até o backend e os secrets serem configurados e testados. A aprovação humana permanece obrigatória.
 
 ### YouTube
 
@@ -87,4 +89,5 @@ A sincronização foi implementada, mas ainda depende de um teste no navegador c
 - Os dados podem ser perdidos ao limpar o armazenamento do navegador. Exporte backups regularmente.
 - As sugestões de descoberta são termos de pesquisa derivados localmente do segmento; o app abre resultados oficiais para inspeção humana. Não há coleta automática de conteúdo nem um modelo de IA conectado.
 - GitHub Pages hospeda conteúdo estático; não é um servidor seguro para armazenar credenciais nem executar tarefas backend privadas.
+- O fluxo Meta nesta branch ainda não está implantado nem validado com credenciais reais. Não aplique a migração a projetos Supabase usados por Fluent Immersion, Inglês para Nações ou outros produtos.
 - A descoberta usa links públicos e a Fase 2 organiza campanhas sem ativar anúncios. Não há API social conectada nem coleta automática. A sincronização das novas tabelas precisa ser validada no navegador com uma conta real.
