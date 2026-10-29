@@ -32,7 +32,7 @@ Deno.serve(async(req:Request)=>{
    const {error}=await admin.from("sge_tracking_events").insert({owner_user_id:w.owner_user_id,workspace_id:w.id,event_type:type,visitor_id:visitor||null,page_path:maxText(payload.page_path,200)||"/",referrer_host:refHost||null,source:maxText(payload.source,80)||null,medium:maxText(payload.medium,80)||null,campaign:maxText(payload.campaign,120)||null,content:maxText(payload.content,120)||null,term:maxText(payload.term,120)||null});
    if(error)return json({error:"Could not record event."},500);return json({accepted:true},202);
   }
-  const authHeader=req.headers.get("Authorization")||"",token=authHeader.replace(/^Bearer\\s+/i,"");
+  const authHeader=req.headers.get("Authorization")||"",token=authHeader.replace(/^Bearer\s+/i,"");
   if(!token)return json({error:"Authentication required."},401);
   const auth=createClient(urlBase,anonKey,{global:{headers:{Authorization:"Bearer "+token}},auth:{persistSession:false,autoRefreshToken:false}});
   const {data:userData,error:authError}=await auth.auth.getUser(token),user=userData?.user;
