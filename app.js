@@ -367,6 +367,8 @@
   const postsStatus = $("instagramPostsStatus");
   const postsGrid = $("instagramPostsGrid");
   const selectedAccountLabel = $("instagramSelectedAccount");
+  const analyticsPostsStatus = $("analyticsInstagramPostsStatus");
+  const analyticsPostsGrid = $("analyticsInstagramPostsGrid");
   let instagramAccounts = [];
   let selectedInstagramAccountId = "";
   function metaEndpointFor(action) {
@@ -404,6 +406,7 @@
       if (!instagramAccounts.some(a=>a.instagram_user_id===selectedInstagramAccountId)) selectedInstagramAccountId = instagramAccounts[0]?.instagram_user_id || "";
       renderInstagramAccounts(); accountsStatus.textContent = instagramAccounts.length ? instagramAccounts.length+" conta(s) autorizada(s)." : "Nenhuma conta conectada. Clique em “Conectar conta”.";
       if (selectedInstagramAccountId) await loadInstagramPosts(selectedInstagramAccountId);
+      else if (analyticsPostsStatus && analyticsPostsGrid) { analyticsPostsStatus.textContent = "Nenhuma conta conectada. Conecte o Instagram em Configurações para carregar suas publicações."; analyticsPostsGrid.innerHTML = '<div class="list-empty">Nenhuma publicação disponível até a conexão oficial.</div>'; }
     } catch(err) { accountsStatus.textContent = safeError(err); accountsStatus.classList.add("error"); renderInstagramAccounts(); }
   }
   async function loadInstagramPosts(accountId) {
@@ -411,24 +414,26 @@
     const account = instagramAccounts.find(a=>a.instagram_user_id===accountId);
     if (selectedAccountLabel) selectedAccountLabel.textContent = account ? "@"+(account.instagram_username||"Instagram") : "Conta selecionada";
     renderInstagramAccounts(); if (!postsStatus || !postsGrid) return;
-    postsStatus.textContent = "Carregando publicações autorizadas…"; postsGrid.innerHTML = '<div class="list-empty">Consultando o Instagram…</div>';
+    const postTargets = [{status:postsStatus,grid:postsGrid},{status:analyticsPostsStatus,grid:analyticsPostsGrid}].filter(t=>t.status&&t.grid);
+    postTargets.forEach(t=>{t.status.textContent = "Carregando publicações autorizadas…"; t.grid.innerHTML = '<div class="list-empty">Consultando o Instagram…</div>';});
     try {
       const payload = await callMeta("posts",{account_id:accountId}); const posts = Array.isArray(payload.posts)?payload.posts:[];
-      postsStatus.textContent = posts.length+" publicação(ões) retornada(s) pela API.";
-      postsGrid.innerHTML = posts.length ? posts.map(p=>{
+      postTargets.forEach(t=>{t.status.textContent = posts.length+" publicação(ões) retornada(s) pela API."});
+      const postsMarkup = posts.length ? posts.map(p=>{
         const image = p.thumbnail_url || p.media_url || ""; const safeImage = /^https?:\/\//i.test(image) ? esc(image) : "";
         const caption = String(p.caption||"").slice(0,220); const date = p.timestamp ? new Date(p.timestamp).toLocaleDateString("pt-BR") : "Data indisponível";
         return '<article class="instagram-post-card">'+(safeImage?'<img loading="lazy" src="'+safeImage+'" alt="Prévia da publicação" referrerpolicy="no-referrer">':'<div class="post-image-placeholder">◎</div>')+
           '<div class="instagram-post-body"><span class="pill">'+esc(p.media_type||"POST")+'</span><small>'+esc(date)+'</small><p>'+esc(caption||"Sem legenda")+(caption.length>=220?"…":"")+'</p><div class="post-stats"><span>♡ '+(p.like_count??"—")+'</span><span>◌ '+(p.comments_count??"—")+'</span></div><div class="button-row"><a class="btn btn-secondary" href="'+esc(p.permalink||"#")+'" target="_blank" rel="noopener noreferrer">Abrir post ↗</a><button class="btn btn-primary" type="button" data-use-post="'+esc(p.id)+'">Usar no tráfego</button></div></div></article>';
       }).join("") : '<div class="list-empty">A API não retornou publicações. Verifique permissões, tipo de conta e disponibilidade dos campos.</div>';
-      postsGrid.querySelectorAll("[data-use-post]").forEach(b=>b.addEventListener("click",()=>{
+      postTargets.forEach(t=>{t.grid.innerHTML=postsMarkup; t.grid.querySelectorAll("[data-use-post]").forEach(b=>b.addEventListener("click",()=>{
         const post=posts.find(p=>String(p.id)===b.dataset.usePost); if(!post)return;
         $("campaignPostUrl").value=post.permalink||""; if(!$("campaignName").value.trim()) $("campaignName").value="Tráfego · "+(account?.instagram_username||"Instagram");
         $("campaignPlatform").value="Instagram"; showView("campaigns"); toast("Publicação selecionada para o plano de tráfego. Revise público, link e orçamento.");
-      }));
-    } catch(err) { postsStatus.textContent = safeError(err); postsGrid.innerHTML = '<div class="list-empty">Não foi possível carregar as publicações.</div>'; }
+      }));});
+    } catch(err) { postTargets.forEach(t=>{t.status.textContent=safeError(err);t.status.classList.add("error");t.grid.innerHTML='<div class="list-empty">Não foi possível carregar as publicações.</div>';}); }
   }
   if ($("refreshInstagramAccounts")) $("refreshInstagramAccounts").addEventListener("click",loadInstagramAccounts);
+  if ($("analyticsRefreshInstagramPosts")) $("analyticsRefreshInstagramPosts").addEventListener("click",loadInstagramAccounts);
   if ($("connectInstagramFromAccounts")) $("connectInstagramFromAccounts").addEventListener("click",()=>showView("settings"));
   if (accountsStatus) { const callback = new URLSearchParams(window.location.search).get("meta"); if(callback==="connected"||callback==="error"){showView("accounts");if(callback==="connected")loadInstagramAccounts();} }
   // Meta Marketing API: connect an ad account, create paused scaffolding only.
