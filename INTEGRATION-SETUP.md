@@ -91,3 +91,27 @@ Solicita apenas `ads_read` e `ads_management` para esta fase. O aplicativo pode 
 A criação de uma campanha/conjunto pausados é uma chamada real à API e cria objetos no Gerenciador de Anúncios, mas não deve entregar anúncios sem criativo/anúncio e sem ativação. Verifique os objetos no Ads Manager. Não tente novamente se a função indicar criação parcial; confira primeiro o ID da campanha retornado para evitar duplicação.
 
 A migration `20261028_sge_meta_ads.sql` adiciona somente tabelas novas com prefixo `sge_meta_ads_`; ela foi aplicada ao projeto `ingles-para-nacoes` sem alterar tabelas existentes.
+
+
+## Rastreamento próprio de tráfego — sem API de anúncios
+
+A função `sge-tracking` está publicada no projeto Supabase `rvgcniaowzmsudzliozf`. A migration `20261029_sge_tracking.sql` cria somente tabelas novas com prefixo `sge_tracking_`, com RLS habilitado e acesso direto revogado para `anon` e `authenticated`. A função valida JWT nas ações de gestão e registra eventos públicos apenas por uma chave pública de workspace.
+
+### O que mede
+
+- Cliques em links rastreáveis criados no painel, redirecionando para destinos HTTPS.
+- Visualizações de página, visualizações de produto, cliques em CTA e cliques de lead quando o pixel é instalado no site.
+- Origem, meio e campanha (UTM), host de referência e caminho da página.
+- Resumo dos últimos 30 dias e cliques por link.
+
+### Como usar
+
+1. Entre na conta na seção Configurações.
+2. Abra Análise de desempenho e clique em **Ativar rastreamento**.
+3. Crie um link rastreável para a página do kit e use esse link na bio, nos Stories, em descrições de vídeos e em mensagens.
+4. Para medir visitas dentro da página de vendas, copie o pixel gerado e instale-o antes de `</body>`. Marque o elemento que identifica o produto com `data-sge-product`, os botões de ação com `data-sge-cta` e os links/formulários de captação com `data-sge-lead`.
+5. Volte ao painel e atualize os números. Cliques contam quando o redirecionamento rastreável é acionado; visitas da página só aparecem após instalar o pixel.
+
+O pixel não registra nomes, e-mails ou endereços IP. A chave pública identifica o workspace e permite enviar eventos; por isso, a função valida os tipos de evento e aplica um limite simples por visitante. Para conformidade com a LGPD, informe o uso de analytics na política de privacidade e respeite as escolhas de consentimento aplicáveis.
+
+**Limitações:** isso não revela quem clicou, não coleta impressões dentro do Instagram e não descobre automaticamente perfis pessoais. Para métricas internas do Instagram, é necessária autorização oficial da API; para mostrar conteúdo a públicos frios com segmentação garantida, é necessário usar uma plataforma de anúncios. O rastreamento próprio não tem taxa por API, mas o uso do Supabase está sujeito aos limites do plano.
