@@ -35,6 +35,7 @@
     if (currentUser) {
       setCloudStatus("Conectado: " + (currentUser.email || "conta autenticada"));
       $("cloudSignIn").textContent = "Conectado";
+      if (typeof loadTrackingWorkspace === "function") loadTrackingWorkspace();
     } else {
       setCloudStatus(supabaseClient ? "Não conectado. Seus dados continuam neste navegador." : "Biblioteca Supabase não carregou. Verifique sua conexão.");
       $("cloudSignIn").textContent = "Entrar e sincronizar";
@@ -583,5 +584,104 @@
     }
   }
 
-  renderAll();
+
+  const TRACKING_FUNCTION_URL = SUPABASE_URL + "/functions/v1/sge-tracking";
+  let trackingWorkspace = null;
+  function trackingStatus(message, isError=false) {
+    const el = $("trackingStatus");
+    if (el) { el.textContent = message; el.classList.toggle("error", isError); }
+  }
+  async function trackingRequest(action, method="GET", body=null) {
+    if (!supabaseClient) throw new Error("A conexão Supabase não está configurada.");
+    const { data } = await supabaseClient.auth.getSession();
+    const headers = { "apikey": SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" };
+    if (data.session?.access_token) headers.Authorization = "Bearer " + data.session.access_token;
+    const response = await fetch(TRACKING_FUNCTION_URL + "?action=" + encodeURIComponent(action), {
+      method, headers, ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Não foi possível concluir a solicitação.");
+    return payload;
+  }
+  function trackingPixelSnippet(publicKey) {
+    const endpoint = TRACKING_FUNCTION_URL + "?action=track";
+    return `<script>
+(()=> {
+  const endpoint = ${JSON.stringify(endpoint)};
+  const publicKey = ${JSON.stringify(publicKey)};
+  const apiKey = ${JSON.stringify(SUPABASE_PUBLISHABLE_KEY)};
+  const event = (eventType) => {
+    try {
+      let visitorId = localStorage.getItem("sge_tracking_visitor");
+      if (!visitorId) {
+        visitorId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
+        localStorage.setItem("sge_tracking_visitor", visitorId);
+      }
+      const q = new URLSearchParams(location.search);
+      const payload = {public_key:publicKey,event_type:eventType,visitor_id:visitorId,page_path:location.pathname,referrer:document.referrer,source:q.get("utm_source"),medium:q.get("utm_medium"),campaign:q.get("utm_campaign"),content:q.get("utm_content"),term:q.get("utm_term")};
+      fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","apikey":apiKey},body:JSON.stringify(payload),keepalive:true}).catch(()=>{});
+    } catch (_) {}
+  };
+  event("page_view");
+  if (document.querySelector("[data-sge-product]")) event("product_view");
+  document.addEventListener("click",(e)=>{if(e.target.closest("[data-sge-cta]"))event("cta_click");if(e.target.closest("[data-sge-lead]"))event("lead_click");},{passive:true});
 })();
+<\/script>`;
+  }
+  async function loadTrackingWorkspace() {
+    if (!currentUser) { trackingStatus("Entre na sua conta na seção Configurações para ativar o rastreamento."); return; }
+    trackingStatus("Configurando seu espaço de rastreamento…");
+    try {
+      const data = await trackingRequest("setup","POST",{});
+      trackingWorkspace = data.workspace;
+      localStorage.setItem("sgeTrackingPublicKey",trackingWorkspace.public_key);
+      $("trackingPixelCode").value = trackingPixelSnippet(trackingWorkspace.public_key);
+      trackingStatus("Rastreamento pronto. Crie links rastreáveis ou instale o pixel na página de vendas.");
+      await loadTrackingSummary();
+    } catch (err) { trackingStatus(safeError(err),true); }
+  }
+  async function loadTrackingSummary() {
+    if (!currentUser) return;
+    try {
+      const data = await trackingRequest("summary");
+      const c = data.counts || {};
+      $("trackPageViews").textContent = fmt(c.page_view || 0);
+      $("trackProductViews").textContent = fmt(c.product_view || 0);
+      $("trackCtaClicks").textContent = fmt(c.cta_click || 0) + (c.lead_click ? " · leads " + fmt(c.lead_click) : "");
+      $("trackOutboundClicks").textContent = fmt(c.outbound_click || 0);
+      const links = data.links || [];
+      $("trackingLinksList").innerHTML = links.length ? links.map(link => {
+        const url = TRACKING_FUNCTION_URL + "?action=go&code=" + encodeURIComponent(link.code);
+        return `<article class="tracking-link-card"><div class="tracking-link-title"><div><b>${esc(link.label)}</b><small>${esc(link.source)} · ${esc(link.medium)} · ${esc(link.campaign)}</small></div><strong>${fmt(link.clicks_30d || 0)} cliques</strong></div><div class="tracking-link-destination">${esc(link.destination_url)}</div><div class="tracking-link-actions"><input aria-label="Link rastreável" readonly value="${esc(url)}"><button class="btn btn-secondary" type="button" data-copy-tracking="${esc(url)}">Copiar link</button></div></article>`;
+      }).join("") : '<div class="list-empty">Ainda não há links. Crie o primeiro acima.</div>';
+      $("trackingLinksList").querySelectorAll("[data-copy-tracking]").forEach(button => button.addEventListener("click",async()=>{
+        try { await navigator.clipboard.writeText(button.dataset.copyTracking); toast("Link rastreável copiado."); }
+        catch { toast("Não foi possível copiar automaticamente; selecione o link e copie."); }
+      }));
+    } catch (err) { trackingStatus(safeError(err),true); }
+  }
+  function initTrackingUI() {
+    $("trackingEnable").addEventListener("click",loadTrackingWorkspace);
+    $("trackingRefresh").addEventListener("click",loadTrackingSummary);
+    $("trackingCopyPixel").addEventListener("click",async()=>{
+      const code=$("trackingPixelCode").value;
+      if(!code){toast("Ative o rastreamento primeiro.");return;}
+      try{await navigator.clipboard.writeText(code);toast("Código do pixel copiado.");}
+      catch{$("trackingPixelCode").focus();$("trackingPixelCode").select();toast("Código selecionado. Use Ctrl+C para copiar.");}
+    });
+    $("trackingLinkForm").addEventListener("submit",async e=>{
+      e.preventDefault();
+      if(!currentUser){trackingStatus("Entre na sua conta em Configurações antes de criar links.",true);return;}
+      const button=$("trackingLinkForm").querySelector('button[type="submit"]');button.disabled=true;
+      try{
+        const data=await trackingRequest("create-link","POST",{label:$("trackingLabel").value.trim(),destination_url:$("trackingDestination").value.trim(),source:$("trackingSource").value,medium:$("trackingMedium").value,campaign:$("trackingCampaign").value.trim()||"fluent-immersion-kits"});
+        $("trackingLinkForm").reset();$("trackingCampaign").value="fluent-immersion-kits";
+        trackingStatus("Link rastreável criado. Copie-o e use-o na divulgação.");toast("Link rastreável criado.");
+        await loadTrackingSummary();
+        if(data.tracking_url&&navigator.clipboard?.writeText){try{await navigator.clipboard.writeText(data.tracking_url);toast("Link criado e copiado para a área de transferência.");}catch{}}
+      }catch(err){trackingStatus(safeError(err),true);}finally{button.disabled=false;}
+    });
+  }
+
+  initTrackingUI();
+  renderAll();
